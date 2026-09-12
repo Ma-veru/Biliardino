@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biliardino Tornei - Torneo Giallo</title>
+    <link rel="icon" href="biliardino-icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="biliardino-icon.svg">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1c1917">
+    
+    <!-- Librerie Esterne -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+    <!-- Il tuo file CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="main-layout">
+        
+        <!-- Sidebar / Menu di Navigazione -->
+        <div class="sidebar">
+            <div class="sidebar-brand">
+                <span class="dot"></span>
+                <h1>Biliardino Tornei</h1>
+            </div>
+            <div class="sidebar-tournament-info">
+                <strong>Modalità torneo: Torneo Giallo</strong>
+                <span>Coppie: rimescolate a ogni turno</span>
+            </div>
+            <nav id="nav-list">
+                <div class="nav-link active" data-view="dashboard">
+                    <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+                    <span class="nav-label">Dashboard</span>
+                </div>
+                <div class="nav-link" data-view="players">
+                    <i data-lucide="users" class="w-5 h-5"></i>
+                    <span class="nav-label">Giocatori</span>
+                </div>
+                <div class="nav-link" data-view="schedule">
+                    <i data-lucide="calendar" class="w-5 h-5"></i>
+                    <span class="nav-label">Calendario</span>
+                </div>
+                <div class="nav-link" data-view="standings">
+                    <i data-lucide="trophy" class="w-5 h-5"></i>
+                    <span class="nav-label">Classifica</span>
+                </div>
+                <div class="nav-link" data-view="playoffs">
+                    <i data-lucide="git-fork" class="w-5 h-5"></i>
+                    <span class="nav-label">Playoffs</span>
+                </div>
+                <div class="nav-link" data-view="settings">
+                    <i data-lucide="settings" class="w-5 h-5"></i>
+                    <span class="nav-label">Impostazioni</span>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <p class="text-xs text-stone-400 px-1">I dati restano su questo dispositivo.</p>
+            </div>
+        </div>
+
+        <!-- Area Contenuti Principale -->
+        <div class="content-area">
+            
+            <div id="alert-container" class="sticky top-0 z-50"></div>
+            <div id="save-status" class="save-status" aria-live="polite">Salvataggio automatico attivo</div>
+            
+            <!-- Intestazione Superiore -->
+            <header class="view-header flex justify-between items-center mb-6 no-print">
+                <h2 id="view-title" class="text-3xl font-bold text-slate-800">Dashboard</h2>
+                <div class="header-actions">
+                    <button id="undo-btn" class="btn btn-secondary" disabled title="Annulla">
+                        <i data-lucide="undo" class="w-4 h-4"></i>
+                        <span>Annulla</span>
+                    </button>
+                    <button id="redo-btn" class="btn btn-secondary" disabled title="Ripeti">
+                        <i data-lucide="redo" class="w-4 h-4"></i>
+                        <span>Ripeti</span>
+                    </button>
+                    <button id="print-section-btn" class="btn btn-secondary" title="Stampa">
+                        <i data-lucide="printer" class="w-4 h-4"></i>
+                        <span>Stampa</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Container Dinamico (qui il JS inietterà le viste) -->
+            <div id="content-view"></div>
+        </div>
+
+    </div>
+
+    <!-- Modali (Popup) -->
+    <div id="modal-container" class="modal-container">
+        <div id="modal-content" class="modal-content"></div>
+    </div>
+
+    <!-- Input Nascosto per Importazione JSON -->
+    <input type="file" id="import-json-file" class="hidden" accept=".json">
+
+    <!-- Il tuo file JavaScript -->
+    <script src="app.js"></script>
+
+    <!-- Registrazione Service Worker per uso offline -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').catch((err) => {
+                    console.error('Registrazione Service Worker fallita:', err);
+                });
+            });
+        }
+    </script>
+</body>
+</html>

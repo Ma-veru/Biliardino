@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+    <!-- Sfondo scuro arrotondato -->
+    <rect width="512" height="512" rx="112" fill="#1c1917" />
+    
+    <!-- Asta di metallo (con riflesso luce) -->
+    <rect x="32" y="232" width="448" height="24" fill="#a8a29e" rx="12" />
+    <rect x="32" y="232" width="448" height="8" fill="#d6d3d1" rx="4" />
+    
+    <!-- Giocatore 1 (Sinistra) -->
+    <circle cx="128" cy="150" r="32" fill="#d4a017" />
+    <rect x="96" y="176" width="64" height="96" fill="#d4a017" rx="16" />
+    <rect x="104" y="260" width="48" height="80" fill="#b3860f" rx="8" />
+
+    <!-- Giocatore 2 (Centro) -->
+    <circle cx="256" cy="150" r="32" fill="#d4a017" />
+    <rect x="224" y="176" width="64" height="96" fill="#d4a017" rx="16" />
+    <rect x="232" y="260" width="48" height="80" fill="#b3860f" rx="8" />
+    
+    <!-- Giocatore 3 (Destra) -->
+    <circle cx="384" cy="150" r="32" fill="#d4a017" />
+    <rect x="352" y="176" width="64" height="96" fill="#d4a017" rx="16" />
+    <rect x="360" y="260" width="48" height="80" fill="#b3860f" rx="8" />
+
+    <!-- Pallina al centro -->
+    <circle cx="256" cy="380" r="28" fill="#f6f5f2" />
+</svg>

@@ -1473,18 +1473,62 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             
             document.getElementById('bulk-btn').addEventListener('click', () => {
-                ui.showModal('Inserimento Multiplo', 
-                    `<p class="text-sm text-slate-500 mb-2">Incolla i nomi (uno per riga).</p>
-                    <textarea id="bulk-in" rows="8" class="mb-3 w-full border p-2 rounded" placeholder="Mario Rossi\nLuigi Verdi"></textarea>
-                    <select id="bulk-role" class="w-full border p-2 rounded">
-                        <option value="Attaccante">Attaccante</option>
-                        <option value="Portiere">Portiere</option>
-                    </select>`, 
-                    `<button class="btn btn-primary" id="do-bulk">Importa</button>`
+                ui.showModal('Importazione Intelligente da WhatsApp', 
+                    `<p class="text-sm text-slate-600 mb-2">Incolla la lista. Il sistema riconoscerà automaticamente i ruoli se usi le emoji (🧤/🥅 per i portieri, ⚽/⚡ per gli attaccanti) e ripulirà i numeri e i simboli.</p>
+                    <textarea id="bulk-in" rows="8" class="mb-3 w-full border p-2 rounded text-sm font-mono" placeholder="1. 🧤 Mario Rossi&#10;2. ⚽ Luca Verdi"></textarea>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Ruolo predefinito (se non ci sono emoji):</label>
+                        <select id="bulk-role" class="w-full border p-2 rounded bg-white text-sm">
+                            <option value="Attaccante">Attaccante</option>
+                            <option value="Portiere">Portiere</option>
+                        </select>
+                    </div>`, 
+                    `<button class="btn btn-primary" id="do-bulk">Elabora e Importa</button>`
                 );
+
                 document.getElementById('do-bulk').onclick = () => { 
-                    logic.player.addBulk(document.getElementById('bulk-in').value, document.getElementById('bulk-role').value); 
-                    ui.hideModal(); 
+                    const rawText = document.getElementById('bulk-in').value;
+                    const defaultRole = document.getElementById('bulk-role').value;
+                    const lines = rawText.split('\n');
+                    
+                    let importedCount = 0;
+                    saveHistory();
+
+                    lines.forEach(line => {
+                        let cleanLine = line.trim();
+                        if (!cleanLine) return;
+
+                        // 1. Riconoscimento automatico del ruolo tramite emoji/keyword
+                        let role = defaultRole;
+                        const lower = cleanLine.toLowerCase();
+                        if (cleanLine.includes('🧤') || cleanLine.includes('🥅') || lower.includes('[p]') || lower.includes('(p)')) {
+                            role = 'Portiere';
+                        } else if (cleanLine.includes('⚽') || cleanLine.includes('⚡') || lower.includes('[a]') || lower.includes('(a)')) {
+                            role = 'Attaccante';
+                        }
+
+                        // 2. Pulizia di numeri iniziali, punti, trattini ed emoji dal nome
+                        // Rimuove es: "1.", "1)", "-", "*", e le emoji comuni di ruolo
+                        cleanLine = cleanLine
+                            .replace(/^[\d]+[\.\)]?\s*/, '') // Rimuove numeri iniziali tipo "1." o "2)"
+                            .replace(/^[-\*\•]\s*/, '')        // Rimuove trattini o pallini puntati
+                            .replace(/[🧤🥅⚽⚡]/g, '')       // Rimuove le emoji specifiche dei ruoli
+                            .trim();
+
+                        if (cleanLine.length > 0) {
+                            const newPlayer = {
+                                id: utils.generateId(),
+                                name: cleanLine,
+                                role: role
+                            };
+                            db.players.push(newPlayer);
+                            importedCount++;
+                        }
+                    });
+
+                    reloadFullUI();
+                    ui.hideModal();
+                    ui.showAlert(`Importati con successo ${importedCount} giocatori!`, 'success');
                 };
             });
             

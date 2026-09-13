@@ -42,7 +42,6 @@ body {
 
 /* --- Sidebar (desktop) / Bottom nav (mobile) --- */
 .sidebar {
-    width: 240px;
     background-color: var(--ink);
     color: #e7e5e4;
     padding: 1.5rem 1rem;
@@ -394,7 +393,7 @@ input:focus, select:focus {
 /* ============================================================
    MOBILE 
    ============================================================ */
-@media (max-width: 768px) {
+@media (max-width: 640px) {
     .table-striped th, .table-striped td {
         padding: 0.35rem 0.45rem;
         font-size: 0.72rem;

@@ -811,14 +811,22 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             checkTiebreakNeeded: () => {
                 const standings = utils.getStandings();
-                // Determina la dimensione del taglio playoff
                 const pSize = db.settings.playoffSize;
                 let topN = 8;
+                
                 if (pSize === 'auto') {
                     const maxP = utils.getPlayersByRole('Portiere').length;
                     const maxA = utils.getPlayersByRole('Attaccante').length;
                     const pairs = Math.min(maxP, maxA);
-                    topN = pairs >= 16 ? 16 : (pairs >= 8 ? 8 : 4);
+                    
+                    // Intelligenza Artificiale per il taglio automatico
+                    if (pairs >= 16) topN = 16;
+                    else if (pairs >= 12) topN = 12;
+                    else if (pairs >= 10) topN = 10;
+                    else if (pairs >= 8) topN = 8;
+                    else if (pairs >= 7) topN = 7;
+                    else if (pairs >= 6) topN = 6;
+                    else topN = 4;
                 } else {
                     topN = parseInt(pSize) || 8;
                 }
@@ -867,17 +875,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 const attackers = standings.filter(player => player.role === 'Attaccante');
                 const totalPairs = Math.min(goalkeepers.length, attackers.length);
 
-                // Calcolo dimensione taglio
+                // Calcolo dimensione taglio intelligente
                 let pSize = db.settings.playoffSize;
                 let mainSize = 8;
                 if (pSize === 'auto') {
-                    mainSize = totalPairs >= 16 ? 16 : (totalPairs >= 8 ? 8 : 4);
+                    if (totalPairs >= 16) mainSize = 16;
+                    else if (totalPairs >= 12) mainSize = 12;
+                    else if (totalPairs >= 10) mainSize = 10;
+                    else if (totalPairs >= 8) mainSize = 8;
+                    else if (totalPairs >= 7) mainSize = 7;
+                    else if (totalPairs >= 6) mainSize = 6;
+                    else mainSize = 4;
                 } else {
                     mainSize = parseInt(pSize) || 8;
                 }
 
                 if (goalkeepers.length < mainSize || attackers.length < mainSize) {
-                    ui.showAlert(`Servono almeno ${mainSize} portieri e ${mainSize} attaccanti per creare un tabellone Top ${mainSize}. Cambia le impostazioni.`, 'error');
+                    ui.showAlert(`Servono almeno ${mainSize} portieri e ${mainSize} attaccanti per creare questo tabellone. Cambia le impostazioni.`, 'error');
                     return;
                 }
 
@@ -899,8 +913,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 db.playoffs.matchResults = {};
-                db.playoffs.qualificationBracket = null; // Rimossa logica 6+6 / 7+7, ora si va a potenze di 2 pulite.
-                db.playoffs.mainBracket = logic.playoffs.buildKnockout(mainTeams);
+                db.playoffs.qualificationBracket = null;
+                
+                // MAGIA: Incroci Sportivi (Seeding) con calcolo dei Riposi (BYE)
+                const T = mainTeams; // Scorciatoia per leggibilità
+                let seededTeams = T;
+
+                if (mainSize === 4) {
+                    seededTeams = [T[0], T[3], T[1], T[2]];
+                } else if (mainSize === 6) {
+                    seededTeams = [T[0], 'BYE', T[3], T[4], T[1], 'BYE', T[2], T[5]];
+                } else if (mainSize === 7) {
+                    seededTeams = [T[0], 'BYE', T[3], T[4], T[1], T[6], T[2], T[5]];
+                } else if (mainSize === 8) {
+                    seededTeams = [T[0], T[7], T[3], T[4], T[1], T[6], T[2], T[5]];
+                } else if (mainSize === 10) {
+                    seededTeams = [T[0], 'BYE', T[7], T[8], T[3], 'BYE', T[4], 'BYE', T[1], 'BYE', T[6], T[9], T[2], 'BYE', T[5], 'BYE'];
+                } else if (mainSize === 12) {
+                    seededTeams = [T[0], 'BYE', T[7], T[8], T[3], 'BYE', T[4], T[11], T[1], 'BYE', T[6], T[9], T[2], 'BYE', T[5], T[10]];
+                } else if (mainSize === 16) {
+                    seededTeams = [T[0], T[15], T[7], T[8], T[3], T[12], T[4], T[11], T[1], T[14], T[6], T[9], T[2], T[13], T[5], T[10]];
+                }
+
+                db.playoffs.mainBracket = logic.playoffs.buildKnockout(seededTeams);
                 
                 // --- TABELLONE SILVER ---
                 db.playoffs.silverBracket = null;
@@ -1236,9 +1271,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // 6. VISTE (RENDERING HTML)
     // ==========================================
-    // ==========================================
-    // 6. VISTE (RENDERING HTML)
-    // ==========================================
     const views = {
 
         renderDashboard: () => {
@@ -1396,34 +1428,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let html = `
                 <div class="max-w-6xl mx-auto pb-8">
-                    <!-- INSERIMENTO GIOCATORI -->
-                    <div class="card no-print bg-slate-50 border-slate-200">
-                        <h3 class="text-lg font-semibold mb-4 flex items-center gap-2 text-slate-700">
-                            <i data-lucide="user-plus" class="w-5 h-5 text-slate-500"></i> Aggiungi Nuovo Giocatore
-                        </h3>
+                    
+                    <div class="card no-print bg-slate-50 border-slate-200 mb-6">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                            <h3 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                <i data-lucide="user-plus" class="w-5 h-5 text-slate-500"></i> Aggiungi Nuovo Giocatore
+                            </h3>
+                            <button id="bulk-btn" class="btn btn-secondary bg-white border-emerald-300 text-emerald-800 hover:bg-emerald-50 flex items-center gap-2 py-1.5 px-3 shadow-sm text-xs font-bold uppercase tracking-wide">
+                                <i data-lucide="message-square" class="w-4 h-4 text-emerald-600"></i> 
+                                Importa Lista
+                            </button>
+                        </div>
+
                         <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                             <div class="md:col-span-5">
-                                <label class="block text-[10px] uppercase tracking-wide font-bold text-slate-500 mb-1">Nome</label>
+                                <label for="new-player-name" class="block text-[10px] uppercase tracking-wide font-bold text-slate-500 mb-1">Nome</label>
                                 <input type="text" id="new-player-name" placeholder="Es. Mario Rossi" maxlength="50" class="bg-white">
                             </div>
                             <div class="md:col-span-4">
-                                <label class="block text-[10px] uppercase tracking-wide font-bold text-slate-500 mb-1">Ruolo</label>
+                                <label for="new-player-role" class="block text-[10px] uppercase tracking-wide font-bold text-slate-500 mb-1">Ruolo</label>
                                 <select id="new-player-role" class="bg-white">
                                     <option value="">Seleziona...</option>
                                     <option value="Portiere">Portiere</option>
                                     <option value="Attaccante">Attaccante</option>
                                 </select>
                             </div>
-                            <div class="md:col-span-3 flex gap-2">
-                                <button id="add-player-btn" class="btn btn-primary flex-1">Aggiungi</button>
-                                <button id="bulk-btn" class="btn btn-secondary flex-none px-3" title="Importa lista">
-                                    <i data-lucide="list" class="w-4 h-4"></i>
-                                </button>
+                            <div class="md:col-span-3">
+                                <button id="add-player-btn" class="btn btn-primary w-full">Aggiungi</button>
                             </div>
                         </div>
                     </div>
 
-                    <!-- LISTA GIOCATORI -->
                     <div class="card">
                         <div class="flex flex-col lg:flex-row justify-between lg:items-center mb-6 border-b pb-4 gap-4">
                             <h3 class="text-lg font-semibold flex items-center gap-2">
@@ -1432,7 +1467,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <div class="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
                                 <div class="relative flex-grow sm:w-64">
                                     <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"></i>
-                                    <input type="search" id="player-search" value="${searchQuery}" placeholder="Cerca giocatore..." class="w-full pl-9 p-2 border rounded text-sm bg-slate-50 focus:bg-white">
+                                    <input type="search" id="player-search" placeholder="Cerca giocatore..." class="w-full pl-9 p-2 border rounded text-sm bg-slate-50 focus:bg-white">
                                 </div>
                                 <select id="player-sort-mode" class="w-full sm:w-auto p-2 border rounded text-sm bg-slate-50 focus:bg-white">
                                     <option value="name" ${sortMode==='name'?'selected':''}>A-Z</option>
@@ -1466,6 +1501,8 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             
             contentView.innerHTML = html;
+            // XSS Fix: Imposta il valore di ricerca dopo aver renderizzato l'HTML
+            document.getElementById('player-search').value = searchQuery;
             lucide.createIcons();
             
             document.getElementById('add-player-btn').addEventListener('click', () => {
@@ -1473,11 +1510,11 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             
             document.getElementById('bulk-btn').addEventListener('click', () => {
-                ui.showModal('Importazione Intelligente da WhatsApp', 
+                ui.showModal('Importazione Intelligente', 
                     `<p class="text-sm text-slate-600 mb-2">Incolla la lista. Il sistema riconoscerà automaticamente i ruoli se usi le emoji (🧤/🥅 per i portieri, ⚽/⚡ per gli attaccanti) e ripulirà i numeri e i simboli.</p>
                     <textarea id="bulk-in" rows="8" class="mb-3 w-full border p-2 rounded text-sm font-mono" placeholder="1. 🧤 Mario Rossi&#10;2. ⚽ Luca Verdi"></textarea>
                     <div class="p-3 bg-slate-50 rounded border border-slate-200">
-                        <label class="block text-xs font-bold text-slate-700 mb-1">Ruolo predefinito (se non ci sono emoji):</label>
+                        <label for="bulk-role" class="block text-xs font-bold text-slate-700 mb-1">Ruolo predefinito (se non ci sono emoji):</label>
                         <select id="bulk-role" class="w-full border p-2 rounded bg-white text-sm">
                             <option value="Attaccante">Attaccante</option>
                             <option value="Portiere">Portiere</option>
@@ -1498,7 +1535,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         let cleanLine = line.trim();
                         if (!cleanLine) return;
 
-                        // 1. Riconoscimento automatico del ruolo tramite emoji/keyword
                         let role = defaultRole;
                         const lower = cleanLine.toLowerCase();
                         if (cleanLine.includes('🧤') || cleanLine.includes('🥅') || lower.includes('[p]') || lower.includes('(p)')) {
@@ -1507,12 +1543,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             role = 'Attaccante';
                         }
 
-                        // 2. Pulizia di numeri iniziali, punti, trattini ed emoji dal nome
-                        // Rimuove es: "1.", "1)", "-", "*", e le emoji comuni di ruolo
+                        // Regex ottimizzata per ignorare caratteri strani e punteggiatura
                         cleanLine = cleanLine
-                            .replace(/^[\d]+[\.\)]?\s*/, '') // Rimuove numeri iniziali tipo "1." o "2)"
-                            .replace(/^[-\*\•]\s*/, '')        // Rimuove trattini o pallini puntati
-                            .replace(/[🧤🥅⚽⚡]/g, '')       // Rimuove le emoji specifiche dei ruoli
+                            .replace(/^[\d\.\)\-\*\•]+\s*/g, '') 
+                            .replace(/[🧤🥅⚽⚡\uFE0F]/g, '')       
                             .trim();
 
                         if (cleanLine.length > 0) {
@@ -1537,6 +1571,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 searchQuery = document.getElementById('player-search').value.toLowerCase();
                 document.getElementById('player-list-table-container').innerHTML = views.renderPlayerTable(getPlayerListToRender(sortMode));
                 views.attachPlayerTableListeners();
+                lucide.createIcons(); // Ottimizzato: ricarica le icone solo nella tabella
             };
 
             document.getElementById('player-sort-mode').addEventListener('change', updatePlayerList);
@@ -1548,39 +1583,49 @@ document.addEventListener('DOMContentLoaded', () => {
         renderPlayerTable: (players) => {
             if (players.length === 0) return '<div class="p-8 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-lg">Nessun giocatore trovato.</div>';
             
+            const portieri = players.filter(p => p.role === 'Portiere');
+            const attaccanti = players.filter(p => p.role === 'Attaccante');
+
+            // XSS Fix: Usiamo utils.escapeHtml(p.name)
+            const renderRow = (p) => `
+                <div class="flex justify-between items-center py-1.5 px-3 border-b border-slate-100 hover:bg-slate-50 transition">
+                    <div class="font-medium text-sm text-slate-800 truncate" title="${utils.escapeHtml(p.name)}">${utils.escapeHtml(p.name)}</div>
+                    <div class="no-print flex gap-1">
+                        <button class="btn btn-ghost btn-sm info-player-btn text-sky-600 p-1 hover:bg-sky-100 rounded" data-id="${p.id}" title="Vedi Storia e Statistiche">
+                            <i data-lucide="line-chart" class="w-4 h-4"></i>
+                        </button>
+                        <button class="btn btn-ghost btn-sm edit-player-btn text-slate-400 p-1 hover:text-slate-600 hover:bg-slate-200 rounded" data-id="${p.id}" title="Modifica Nome">
+                            <i data-lucide="pencil" class="w-4 h-4"></i>
+                        </button>
+                        <button class="btn btn-ghost btn-sm remove-player-btn text-red-400 p-1 hover:text-red-600 hover:bg-red-100 rounded" data-id="${p.id}" title="Rimuovi Giocatore">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+
             return `
-                <table class="w-full table-striped">
-                    <thead>
-                        <tr>
-                            <th>Nome</th>
-                            <th>Ruolo</th>
-                            <th class="no-print text-right pr-4">Azioni</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${players.map(p => `
-                            <tr>
-                                <td class="font-medium text-slate-800">${p.name}</td>
-                                <td>
-                                    <span class="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${p.role === 'Portiere' ? 'bg-sky-100 text-sky-700' : 'bg-orange-100 text-orange-700'}">
-                                        ${p.role}
-                                    </span>
-                                </td>
-                                <td class="no-print text-right">
-                                    <button class="btn btn-ghost btn-sm info-player-btn text-sky-600 hover:bg-sky-50" data-id="${p.id}" title="Vedi Storia e Statistiche">
-                                        <i data-lucide="line-chart" class="w-4 h-4"></i>
-                                    </button>
-                                    <button class="btn btn-ghost btn-sm edit-player-btn text-slate-400 hover:text-slate-600 hover:bg-slate-100" data-id="${p.id}" title="Modifica Nome">
-                                        <i data-lucide="pencil" class="w-4 h-4"></i>
-                                    </button>
-                                    <button class="btn btn-ghost btn-sm remove-player-btn text-red-400 hover:text-red-600 hover:bg-red-50" data-id="${p.id}" title="Rimuovi Giocatore">
-                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
-                                    </button>
-                                </td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-lg border border-sky-200 overflow-hidden shadow-sm">
+                        <div class="bg-sky-50 py-2 px-3 border-b border-sky-200 text-[10px] font-bold text-sky-800 uppercase tracking-wider flex justify-between items-center">
+                            <span>Portieri in lista (${portieri.length})</span>
+                            <span class="no-print">Azioni</span>
+                        </div>
+                        <div class="max-h-[500px] overflow-y-auto">
+                            ${portieri.length === 0 ? '<div class="p-4 text-center text-xs text-slate-400 italic">Nessun portiere trovato.</div>' : portieri.map(renderRow).join('')}
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-lg border border-orange-200 overflow-hidden shadow-sm">
+                        <div class="bg-orange-50 py-2 px-3 border-b border-orange-200 text-[10px] font-bold text-orange-800 uppercase tracking-wider flex justify-between items-center">
+                            <span>Attaccanti in lista (${attaccanti.length})</span>
+                            <span class="no-print">Azioni</span>
+                        </div>
+                        <div class="max-h-[500px] overflow-y-auto">
+                            ${attaccanti.length === 0 ? '<div class="p-4 text-center text-xs text-slate-400 italic">Nessun attaccante trovato.</div>' : attaccanti.map(renderRow).join('')}
+                        </div>
+                    </div>
+                </div>
             `;
         },
 
@@ -1685,279 +1730,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
         },
-
-        renderSchedule: () => {
-            const opponentCounts = {};
-            const pairCounts = {};
-            db.schedule.forEach(m => {
-                const t1 = [m.team1.p, m.team1.a]; const t2 = [m.team2.p, m.team2.a];
-                t1.forEach(id1 => t2.forEach(id2 => { const k = [id1, id2].sort().join('_'); opponentCounts[k] = (opponentCounts[k] || 0) + 1; }));
-                pairCounts[`${m.team1.p}_${m.team1.a}`] = (pairCounts[`${m.team1.p}_${m.team1.a}`] || 0) + 1;
-                pairCounts[`${m.team2.p}_${m.team2.a}`] = (pairCounts[`${m.team2.p}_${m.team2.a}`] || 0) + 1;
-            });
-            
-            let totalReds = 0;
-            let totalYellows = 0;
-            for(let k in pairCounts) if(pairCounts[k]>1) totalReds += (pairCounts[k]-1);
-            for(let k in opponentCounts) if(opponentCounts[k]>1) totalYellows += (opponentCounts[k]-1);
-
-            const matchesByRound = db.schedule.reduce((acc, match) => {
-                const round = match.round;
-                if (!acc[round]) acc[round] = [];
-                acc[round].push(match);
-                return acc;
-            }, {});
-
-            let html = `
-                <div class="max-w-6xl mx-auto pb-8">
-                    <!-- INTESTAZIONE CALENDARIO -->
-                    <div class="card no-print flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50 border-slate-200">
-                        <div>
-                            <h3 class="text-lg font-semibold mb-2 flex items-center gap-2">
-                                <i data-lucide="calendar-days" class="w-5 h-5 text-slate-500"></i> Gestione Calendario
-                            </h3>
-                            <div class="flex gap-2 text-xs flex-wrap">
-                                <div class="px-2 py-1 rounded-full ${totalReds>0 ? 'bg-red-100 text-red-700 border-red-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200'} font-bold border tracking-wide uppercase">Coppie Ripetute: ${totalReds}</div>
-                                <div class="px-2 py-1 rounded-full ${totalYellows>0 ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200'} font-bold border tracking-wide uppercase">Avversari Ripetuti: ${totalYellows}</div>
-                            </div>
-                        </div>
-                        <div class="flex gap-2">
-                             <button id="generate-schedule-btn" class="btn btn-primary shadow-sm">
-                                <i data-lucide="plus" class="w-4 h-4"></i> Genera Nuovi Turni
-                            </button>
-                             <button id="reset-schedule-btn" class="btn btn-danger shadow-sm">
-                                <i data-lucide="trash-2" class="w-4 h-4"></i> Svuota
-                            </button>
-                        </div>
-                    </div>
-            `;
-
-            if (db.schedule.length > 0) {
-                const available = utils.getAvailableMatches();
-                const occupiedCount = utils.getOccupiedPlayerIds().size;
-                const inProgressMatches = db.schedule.filter(m => m.inProgress && !m.played);
-                
-                html += `
-                    <!-- PARTITE PRONTE -->
-                    <div class="card no-print border-sky-200 shadow-sm">
-                        <div class="flex flex-col md:flex-row justify-between md:items-center mb-4 border-b pb-3 gap-2">
-                            <h3 class="text-lg font-semibold flex items-center gap-2 text-sky-800">
-                                <i data-lucide="zap" class="w-5 h-5 text-sky-500"></i> Partite in evidenza
-                            </h3>
-                            <div class="flex gap-2 text-[10px] font-bold uppercase tracking-wider">
-                                <span class="px-2 py-1 rounded bg-sky-100 text-sky-700">In gioco: ${inProgressMatches.length}</span>
-                                <span class="px-2 py-1 rounded bg-emerald-100 text-emerald-700">Pronte: ${available.length}</span>
-                            </div>
-                        </div>
-                        
-                        ${inProgressMatches.length > 0 ? `
-                            <div class="mb-5">
-                                <p class="text-[10px] font-bold uppercase tracking-widest text-sky-600 mb-3 ml-1">Attualmente in corso</p>
-                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                    ${inProgressMatches.map(m => `
-                                        <div class="flex flex-col gap-2 p-3 rounded-lg border border-sky-200 bg-sky-50 shadow-sm relative overflow-hidden">
-                                            <div class="absolute top-0 left-0 w-1 h-full bg-sky-400"></div>
-                                            <div class="flex items-center justify-between gap-3 pl-2">
-                                                <div class="text-sm min-w-0">
-                                                    <span class="text-[10px] text-sky-600 font-mono font-bold uppercase tracking-wide">Round ${m.round}</span><br>
-                                                    <span class="font-bold truncate text-slate-800">${utils.getPlayerById(m.team1.p).name} + ${utils.getPlayerById(m.team1.a).name}</span>
-                                                    <span class="text-slate-400 text-xs mx-1">vs</span>
-                                                    <span class="font-bold truncate text-slate-800">${utils.getPlayerById(m.team2.p).name} + ${utils.getPlayerById(m.team2.a).name}</span>
-                                                </div>
-                                                <button class="btn btn-ghost btn-sm toggle-inprogress-btn text-sky-600 hover:bg-sky-100" data-id="${m.id}" data-value="false" title="Ferma/Metti in pausa">
-                                                    <i data-lucide="pause" class="w-4 h-4"></i>
-                                                </button>
-                                            </div>
-                                            <div class="flex items-center justify-between gap-2 pt-2 mt-1 border-t border-sky-200/50 pl-2">
-                                                <label class="text-[10px] uppercase font-bold text-sky-700">Salva Risultato:</label>
-                                                <div class="flex items-center gap-2">
-                                                    <input type="number" min="0" value="${m.score1 !== null ? m.score1 : ''}" class="w-12 p-1 text-center text-sm font-bold border-sky-200 rounded autosave-input" data-id="${m.id}" data-team="1">
-                                                    <span class="text-sky-300">-</span>
-                                                    <input type="number" min="0" value="${m.score2 !== null ? m.score2 : ''}" class="w-12 p-1 text-center text-sm font-bold border-sky-200 rounded autosave-input" data-id="${m.id}" data-team="2">
-                                                </div>
-                                            </div>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        ` : ''}
-                        
-                        ${available.length === 0 ? `
-                            <div class="p-4 text-center text-slate-400 border border-dashed border-slate-200 rounded-lg text-sm bg-slate-50">
-                                Nessuna partita giocabile al momento.<br><span class="text-xs">(${occupiedCount > 0 ? 'I giocatori necessari sono impegnati in altre sfide.' : 'Il calendario è completo.'})</span>
-                            </div>
-                        ` : `
-                            <div>
-                                <p class="text-[10px] font-bold uppercase tracking-widest text-emerald-600 mb-3 ml-1">Giocatori liberi / Pronte a partire</p>
-                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                    ${available.slice(0, 12).map(m => `
-                                        <div class="flex items-center justify-between gap-3 p-3 rounded-lg border border-emerald-100 bg-white shadow-sm hover:border-emerald-300 transition">
-                                            <div class="text-sm min-w-0">
-                                                <span class="text-[10px] text-slate-400 font-mono uppercase">Round ${m.round}</span><br>
-                                                <span class="font-medium truncate text-slate-700">${utils.getPlayerById(m.team1.p).name} + ${utils.getPlayerById(m.team1.a).name}</span>
-                                                <span class="text-slate-300 text-xs mx-0.5">vs</span>
-                                                <span class="font-medium truncate text-slate-700">${utils.getPlayerById(m.team2.p).name} + ${utils.getPlayerById(m.team2.a).name}</span>
-                                            </div>
-                                            <button class="btn btn-sm bg-emerald-100 text-emerald-700 hover:bg-emerald-200 start-match-btn flex-shrink-0" data-id="${m.id}">
-                                                <i data-lucide="play" class="w-4 h-4"></i> Inizia
-                                            </button>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        `}
-                    </div>
-                `;
-            }
-
-            if (db.schedule.length === 0) {
-                html += '<div class="p-12 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-xl bg-white">Il calendario non è stato ancora generato. Usa il pulsante in alto.</div>';
-            } else {
-                Object.keys(matchesByRound).sort((a, b) => a - b).forEach(round => {
-                    const roundMatches = matchesByRound[round].filter(m => !m.inProgress);
-                    const playedCount = roundMatches.filter(m => m.played).length;
-                    const isComplete = roundMatches.length > 0 && playedCount === roundMatches.length;
-                    const collapsed = roundCollapseOverrides.hasOwnProperty(round) ? roundCollapseOverrides[round] : isComplete;
-
-                    html += `
-                        <div class="card shadow-sm mb-4">
-                            <div class="flex justify-between items-center mb-2 border-b pb-3 cursor-pointer round-header group" data-round="${round}">
-                                <h3 class="text-lg font-bold flex items-center gap-3 text-slate-700 group-hover:text-slate-900 transition">
-                                    Round ${round} <span class="text-xs font-normal text-slate-400">(${roundMatches.length} Partite)</span>
-                                    ${isComplete ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700"><i data-lucide="check" class="w-3 h-3 inline mr-1"></i>Completato</span>' : `<span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500">${playedCount}/${roundMatches.length} completate</span>`}
-                                </h3>
-                                <button class="btn btn-ghost btn-sm round-toggle-btn no-print text-slate-400 group-hover:bg-slate-100" data-round="${round}">
-                                    <i data-lucide="${collapsed ? 'chevron-down' : 'chevron-up'}" class="w-5 h-5"></i>
-                                </button>
-                            </div>
-                            <div class="${collapsed ? 'hidden' : 'mt-4'}" id="round-body-${round}">
-                                <div class="overflow-x-auto rounded-lg border border-slate-200">
-                                    <table class="w-full table-striped min-w-[600px] text-sm">
-                                        <thead class="bg-slate-50 border-b border-slate-200">
-                                            <tr>
-                                                <th class="text-slate-500 font-semibold py-2">Partita</th>
-                                                <th class="text-slate-500 font-semibold py-2">Squadra 1</th>
-                                                <th class="text-slate-500 font-semibold py-2">Squadra 2</th>
-                                                <th class="no-print text-slate-500 font-semibold py-2">Risultato</th>
-                                                <th class="no-print text-slate-500 font-semibold py-2">Stato</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            ${roundMatches.map(match => {
-                                                const team1Name = `${utils.getPlayerById(match.team1.p).name} &bull; ${utils.getPlayerById(match.team1.a).name}`;
-                                                const team2Name = `${utils.getPlayerById(match.team2.p).name} &bull; ${utils.getPlayerById(match.team2.a).name}`;
-                                                
-                                                const k1 = `${match.team1.p}_${match.team1.a}`; 
-                                                const k2 = `${match.team2.p}_${match.team2.a}`;
-                                                const partnerRepeat = pairCounts[k1] > 1 || pairCounts[k2] > 1;
-                                                
-                                                let oppRepetition = false;
-                                                const t1 = [match.team1.p, match.team1.a]; const t2 = [match.team2.p, match.team2.a];
-                                                t1.forEach(id1 => { t2.forEach(id2 => { const key = [id1, id2].sort().join('_'); if (opponentCounts[key] > 1) oppRepetition = true; }); });
-                                                
-                                                let rowClass = ""; let warnIcon = "";
-                                                if (match.played) {
-                                                    rowClass = "bg-emerald-50/30";
-                                                    warnIcon = `<i data-lucide="check" class="w-4 h-4 text-emerald-500 inline mr-1"></i>`;
-                                                } else if (match.inProgress) { rowClass = "bg-sky-50"; warnIcon = `<i data-lucide="play-circle" class="w-4 h-4 text-sky-500 inline mr-1"></i>`; }
-                                                else if (partnerRepeat) { rowClass = "bg-red-50"; warnIcon = `<i data-lucide="users" class="w-4 h-4 text-red-500 inline mr-1" title="Coppia ripetuta"></i>`; } 
-                                                else if (oppRepetition) { rowClass = "bg-amber-50/50"; warnIcon = `<i data-lucide="users" class="w-4 h-4 text-amber-500 inline mr-1" title="Avversario ripetuto"></i>`; }
-                                                
-                                                const status = match.played ? 
-                                                    `<span class="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700">Giocata</span>` : 
-                                                    match.inProgress ?
-                                                    `<span class="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider bg-sky-100 text-sky-700">In corso</span>` :
-                                                    `<span class="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500">Da giocare</span>`;
-                                                
-                                                const printBoxes = `
-                                                    <div class="only-print flex items-center mt-1">
-                                                        <span class="score-input-print-small"></span> <span class="score-input-print-small"></span> - <span class="score-input-print-small"></span> <span class="score-input-print-small"></span>
-                                                    </div>`;
-
-                                                return `
-                                                    <tr class="${rowClass} border-b border-slate-100 last:border-0 hover:bg-slate-50 transition">
-                                                        <td class="text-xs text-slate-400 font-mono flex items-center gap-1 py-3">${warnIcon} #${match.round}.${match.id.slice(-4)}</td>
-                                                        <td class="font-medium ${pairCounts[k1]>1?'text-red-600 font-bold':''} text-slate-700">${team1Name}</td>
-                                                        <td class="font-medium ${pairCounts[k2]>1?'text-red-600 font-bold':''} text-slate-700">${team2Name}</td>
-                                                        <td class="no-print">
-                                                            <div class="flex gap-1.5 items-center">
-                                                                <input type="number" min="0" value="${match.score1 !== null ? match.score1 : ''}" class="w-12 p-1 text-center font-bold text-sm border-slate-200 rounded autosave-input" data-id="${match.id}" data-team="1">
-                                                                <span class="text-slate-300">-</span>
-                                                                <input type="number" min="0" value="${match.score2 !== null ? match.score2 : ''}" class="w-12 p-1 text-center font-bold text-sm border-slate-200 rounded autosave-input" data-id="${match.id}" data-team="2">
-                                                            </div>
-                                                            ${printBoxes}
-                                                        </td>
-                                                        <td class="no-print">${status}</td>
-                                                    </tr>
-                                                `;
-                                            }).join('')}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                });
-                
-                html += `</div>`; // Fine max-w-6xl
-            }
-
-            contentView.innerHTML = html;
-            lucide.createIcons();
-
-            document.getElementById('generate-schedule-btn')?.addEventListener('click', logic.schedule.generate);
-            document.getElementById('reset-schedule-btn')?.addEventListener('click', () => {
-                 if (confirm('Sei sicuro di voler resettare l\'intero calendario? I punteggi andranno persi.')) {
-                    logic.schedule.reset();
-                }
-            });
-
-            document.querySelectorAll('.round-header, .round-toggle-btn').forEach(el => {
-                el.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const round = e.currentTarget.getAttribute('data-round');
-                    const roundMatches = matchesByRound[round];
-                    const isComplete = roundMatches.length > 0 && roundMatches.every(m => m.played);
-                    const currentlyCollapsed = roundCollapseOverrides.hasOwnProperty(round) ? roundCollapseOverrides[round] : isComplete;
-                    roundCollapseOverrides[round] = !currentlyCollapsed;
-                    views.renderSchedule();
-                });
-            });
-
-            document.querySelectorAll('.start-match-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    logic.schedule.setInProgress(e.currentTarget.getAttribute('data-id'), true);
-                });
-            });
-
-            document.querySelectorAll('.toggle-inprogress-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const id = e.currentTarget.getAttribute('data-id');
-                    const value = e.currentTarget.getAttribute('data-value') === 'true';
-                    logic.schedule.setInProgress(id, value);
-                });
-            });
-
-            document.querySelectorAll('.autosave-input').forEach(input => {
-                const saveScore = (e) => {
-                    const id = e.target.getAttribute('data-id');
-                    const container = e.target.closest('td') || e.target.closest('.ready-match-card');
-                    if (!container) return;
-
-                    const score1Input = container.querySelector('[data-team="1"]');
-                    const score2Input = container.querySelector('[data-team="2"]');
-                    const score1 = score1Input ? score1Input.value : '';
-                    const score2 = score2Input ? score2Input.value : '';
-
-                    logic.schedule.autoSaveResult(id, score1, score2);
-                    views.renderSchedule();
-                };
-
-                input.addEventListener('blur', saveScore);
-                input.addEventListener('change', saveScore);
-            });
-        },
-
+        
         renderStandings: () => {
             const standings = utils.getStandings();
             const targetGames = db.settings.rounds;
@@ -2066,22 +1839,52 @@ document.addEventListener('DOMContentLoaded', () => {
             logic.playoffs.syncBracketProgress(db.playoffs.thirdPlaceBracket);
             logic.playoffs.tryBuildFifthPlaceBracket();
             logic.playoffs.syncBracketProgress(db.playoffs.fifthPlaceBracket);
-            const roleSize = [6, 7, 8].includes(db.settings.playoffRoleSize) ? db.settings.playoffRoleSize : 8;
-            const directTeams = ({ 6: 2, 7: 1, 8: 0 })[roleSize];
+            logic.playoffs.syncBracketProgress(db.playoffs.silverBracket); 
+
+            const standings = utils.getStandings();
+            
+            // 1. Calcolo dinamico della dimensione per i testi
+            const maxP = utils.getPlayersByRole('Portiere').length;
+            const maxA = utils.getPlayersByRole('Attaccante').length;
+            const totalPairs = Math.min(maxP, maxA);
+            
+            let actualSize = 8;
+            if (db.settings.playoffSize === 'auto' || !db.settings.playoffSize) {
+                if (totalPairs >= 16) actualSize = 16;
+                else if (totalPairs >= 12) actualSize = 12;
+                else if (totalPairs >= 10) actualSize = 10;
+                else if (totalPairs >= 8) actualSize = 8;
+                else if (totalPairs >= 7) actualSize = 7;
+                else if (totalPairs >= 6) actualSize = 6;
+                else actualSize = 4;
+            } else {
+                actualSize = parseInt(db.settings.playoffSize);
+            }
+
+            // 2. Descrizione Formato dinamica
+            let formatDescription = "";
+            if (actualSize === 4) formatDescription = "Le prime 4 coppie giocano le Semifinali.";
+            else if (actualSize === 6) formatDescription = "1° e 2° classificato diretti in Semifinale. Dal 3° al 6° posto giocano i Quarti.";
+            else if (actualSize === 7) formatDescription = "Il 1° classificato diretto in Semifinale. Dal 2° al 7° posto giocano i Quarti.";
+            else if (actualSize === 8) formatDescription = "Le prime 8 coppie giocano i Quarti di Finale.";
+            else if (actualSize === 10) formatDescription = "Le prime 6 passano ai Quarti. Dal 7° al 10° posto giocano gli Ottavi (Turno Preliminare).";
+            else if (actualSize === 12) formatDescription = "Le prime 4 passano ai Quarti. Dal 5° al 12° posto giocano gli Ottavi (Turno Preliminare).";
+            else if (actualSize === 16) formatDescription = "Le prime 16 coppie giocano gli Ottavi di Finale.";
+
             const formationModeLabels = { random: 'Casuale puro', 'balanced-random': 'Casuale equilibrato', 'max-balance': 'Massimo equilibrio' };
             const formationModeLabel = formationModeLabels[db.settings.teamFormationMode] || 'Casuale equilibrato';
-            const directTeamList = db.playoffs.directTeams?.length ? db.playoffs.directTeams : db.playoffs.directTeam ? [db.playoffs.directTeam] : [];
-            const standings = utils.getStandings();
-            const topPlayers = standings.slice(0, db.settings.playoffsTop);
+            
             const incompleteScheduleCount = db.schedule.filter(match => !match.played).length;
             const hasIncompleteSchedule = incompleteScheduleCount > 0;
             const hasExistingPlayoffs = Boolean(
-                db.playoffs.mainBracket || db.playoffs.playoutBracket || db.playoffs.thirdPlaceBracket || db.playoffs.fifthPlaceBracket || db.playoffs.qualificationBracket || db.playoffs.directTeam || db.playoffs.directTeams?.length
+                db.playoffs.mainBracket || db.playoffs.playoutBracket || db.playoffs.thirdPlaceBracket || db.playoffs.fifthPlaceBracket || db.playoffs.qualificationBracket || db.playoffs.silverBracket
             );
+            
             const tied = logic.playoffs.checkTiebreakNeeded();
             const tb = db.playoffs.tiebreak;
             const tiedIds = tied ? tied.map(p => p.id) : [];
             const tbMatchesTiedPair = tb && tied && tied.length === 2 && tiedIds.includes(tb.p1Id) && tiedIds.includes(tb.p2Id);
+            
             const hasBracketContent = (bracket) => {
                 if (!bracket || !Array.isArray(bracket.matches) || bracket.matches.length === 0) return false;
                 const isRealParticipant = (team) => team && team !== 'TBD' && team !== 'BYE';
@@ -2100,7 +1903,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                             <div class="bg-white p-4 rounded-lg border border-slate-200">
                                 <h4 class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Formato & Regole</h4>
-                                <p class="text-sm text-slate-700 leading-relaxed mb-2"><b>Formato ${roleSize}+${roleSize}:</b> ${roleSize === 8 ? 'Le prime 8 coppie giocano i Quarti di Finale' : `${directTeams} squadre dirette, le restanti giocano il Turno Preliminare`}. Le coppie vengono rimescolate tra i turni (sempre 1P + 1A).</p>
+                                <p class="text-sm text-slate-700 leading-relaxed mb-2"><b>Formato Top ${actualSize}:</b> ${formatDescription} Le coppie vengono rimescolate tra i turni (sempre 1P + 1A).</p>
                                 <p class="text-sm text-slate-700"><b>Vittoria:</b> ${db.settings.playoffScoreTarget} gol. <span class="text-slate-400 mx-1">|</span> <b>Formazione:</b> ${formationModeLabel}</p>
                             </div>
                             <div class="bg-white p-4 rounded-lg border border-slate-200">
@@ -2109,12 +1912,14 @@ document.addEventListener('DOMContentLoaded', () => {
                                     ? `<div class="flex gap-2 items-start text-red-600 bg-red-50 p-2 rounded text-sm font-medium"><i data-lucide="alert-circle" class="w-4 h-4 mt-0.5 flex-shrink-0"></i> <span>Mancano ${incompleteScheduleCount} partite nel calendario. I playoff richiedono classifiche definitive.</span></div>` 
                                     : `<div class="flex gap-2 items-start text-emerald-600 bg-emerald-50 p-2 rounded text-sm font-medium"><i data-lucide="check-circle" class="w-4 h-4 mt-0.5 flex-shrink-0"></i> <span>Calendario completo. Generazione sbloccata.</span></div>`
                                 }
-                                <p class="text-xs text-slate-500 mt-2"><b>Dirette:</b> ${directTeamList.length ? directTeamList.map(t => logic.playoffs.participantName(t)).join('; ') : 'Da definire'}.</p>
                             </div>
                         </div>
 
                         <div class="flex gap-3 items-center flex-wrap">
-                             <button id="generate-playoffs-btn" class="btn btn-primary" ${topPlayers.length < 2 || hasIncompleteSchedule ? 'disabled' : ''}>
+                             <button id="share-playoffs-btn" class="btn btn-secondary bg-white border-green-500 text-green-700 hover:bg-green-50 shadow-sm font-bold" ${hasExistingPlayoffs ? '' : 'disabled'} type="button">
+                                <i data-lucide="share-2" class="w-4 h-4 text-green-600"></i> Copia Incontri
+                            </button>
+                             <button id="generate-playoffs-btn" class="btn btn-primary" ${standings.length < 2 || hasIncompleteSchedule ? 'disabled' : ''}>
                                 <i data-lucide="git-branch" class="w-4 h-4"></i> Genera Nuovi Tabelloni
                             </button>
                              <button id="reset-playoffs-btn" class="btn btn-danger btn-sm" ${hasExistingPlayoffs ? '' : 'disabled'} type="button">
@@ -2129,7 +1934,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += `
                     <div class="card border-amber-300 bg-amber-50 no-print shadow-sm">
                         <h3 class="text-lg font-bold mb-2 flex items-center gap-2 text-amber-800">
-                            <i data-lucide="alert-triangle" class="w-5 h-5"></i> Spareggio: Parità al taglio Top ${db.settings.playoffsTop}
+                            <i data-lucide="alert-triangle" class="w-5 h-5"></i> Spareggio: Parità al taglio Top ${actualSize}
                         </h3>
                         <p class="text-sm text-amber-700 mb-4">
                             <b>${p1.name}</b> e <b>${p2.name}</b> sono pari per punti (${p1.Pts}) e differenza reti (${p1.Diff > 0 ? '+' : ''}${p1.Diff}). Inserisci l'esito dello spareggio per sbloccare i Playoff.
@@ -2164,10 +1969,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const fourthPlace = logic.playoffs.getFinalLoser(db.playoffs.thirdPlaceBracket);
                 const fifthPlace = logic.playoffs.getBracketChampion(db.playoffs.fifthPlaceBracket);
                 const playoutWinner = logic.playoffs.getBracketChampion(db.playoffs.playoutBracket);
+                const silverWinner = logic.playoffs.getBracketChampion(db.playoffs.silverBracket);
 
                 const rankRow = (label, val, note, isGold = false) => `
                     <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center py-2.5 border-b border-slate-100 last:border-0">
-                        <span class="font-bold ${isGold ? 'text-amber-600' : 'text-slate-600'} w-24">${label}</span>
+                        <span class="font-bold ${isGold ? 'text-amber-600' : 'text-slate-600'} w-32">${label}</span>
                         <span class="text-base ${val ? 'font-black text-slate-800' : 'text-slate-400 italic'} flex-1">${val ? logic.playoffs.participantName(val) : 'In corso...'}</span>
                         ${note ? `<span class="text-xs font-medium text-slate-400 uppercase tracking-wide hidden sm:block">${note}</span>` : ''}
                     </div>`;
@@ -2176,14 +1982,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="card shadow-sm border-amber-200">
                         <h3 class="text-xl font-bold mb-4 border-b pb-3 flex items-center gap-2 text-slate-800"><i data-lucide="award" class="w-6 h-6 text-amber-500"></i> Podio e Classifica Finale Playoff</h3>
                         <div class="bg-amber-50/30 p-2 rounded-lg border border-amber-100 mb-2">
-                            ${rankRow('1° Posto', champion, 'Campioni', true)}
+                            ${rankRow('1° Posto', champion, 'Campioni Assoluti', true)}
                         </div>
                         <div class="px-2">
                             ${rankRow('2° Posto', runnerUp, 'Finalisti')}
                             ${db.playoffs.thirdPlaceBracket ? rankRow('3° Posto', thirdPlace, 'Vincitori Finalina') : rankRow('3° Posto', null, 'Finalina')}
                             ${db.playoffs.thirdPlaceBracket ? rankRow('4° Posto', fourthPlace, '') : rankRow('4° Posto', null, '')}
                             ${db.playoffs.fifthPlaceBracket ? rankRow('5° Posto', fifthPlace, 'Tabellone 5°/6°') : ''}
-                            ${db.playoffs.playoutBracket ? rankRow(db.playoffs.fifthPlaceBracket ? '6° Posto' : '5° Posto', playoutWinner, 'Vincitori Playout') : ''}
+                            ${db.playoffs.silverBracket ? rankRow('Vincitori Silver', silverWinner, 'Torneo Ripescati') : ''}
+                            ${db.playoffs.playoutBracket ? rankRow('Vincitori Playout', playoutWinner, 'Cucchiaio di Legno') : ''}
                         </div>
                     </div>
                 `;
@@ -2202,12 +2009,12 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
 
             if (db.playoffs.mainBracket && hasBracketContent(db.playoffs.mainBracket)) {
-                html += renderSection('Tabellone Principale (1°-2° posto)', 'layout-template', 'Sfide a eliminazione diretta per il titolo', views.renderBracketRound(db.playoffs.mainBracket));
+                html += renderSection('Tabellone Principale', 'layout-template', 'Sfide a eliminazione diretta per il titolo', views.renderBracketRound(db.playoffs.mainBracket));
             }
 
             if (db.playoffs.thirdPlaceBracket && hasBracketContent(db.playoffs.thirdPlaceBracket)) {
                 html += renderSection('Finalina 3°/4° posto', 'medal', 'Le perdenti delle semifinali', views.renderBracketRound(db.playoffs.thirdPlaceBracket));
-            } else if (db.playoffs.mainBracket && hasBracketContent(db.playoffs.mainBracket)) {
+            } else if (db.playoffs.mainBracket && hasBracketContent(db.playoffs.mainBracket) && db.settings.playoffThirdPlaceEnabled) {
                 html += `<div class="card no-print shadow-sm text-center py-6 text-sm font-medium text-slate-400 bg-slate-50 border-dashed">La finalina 3°/4° posto sarà sbloccata al termine delle semifinali.</div>`;
             }
 
@@ -2219,8 +2026,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += renderSection('Tabellone 5°/6° posto', 'list-ordered', 'Semifinali e finale per le perdenti dei Quarti', views.renderBracketRound(db.playoffs.fifthPlaceBracket));
             }
 
+            if (db.playoffs.silverBracket && hasBracketContent(db.playoffs.silverBracket)) {
+                html += renderSection('Torneo Silver (Ripescati)', 'shield', 'Tabellone parallelo per i giocatori non qualificati al Tabellone Principale', views.renderBracketRound(db.playoffs.silverBracket));
+            }
+
             if (db.playoffs.playoutBracket && hasBracketContent(db.playoffs.playoutBracket)) {
-                html += renderSection(`Playout (${db.playoffs.fifthPlaceBracket ? '6°' : '5°'} posto)`, 'shield-alert', 'Sfida tra le coppie fuori dalla fascia alta', views.renderBracketRound(db.playoffs.playoutBracket));
+                html += renderSection(`Cucchiaio di Legno (Playout)`, 'shield-alert', 'Sfida per non arrivare ultimi', views.renderBracketRound(db.playoffs.playoutBracket));
             } 
             
             if (db.playoffs.excludedPlayoutTeam) {
@@ -2231,6 +2042,60 @@ document.addEventListener('DOMContentLoaded', () => {
 
             contentView.innerHTML = html;
             lucide.createIcons();
+
+            // EVENTO TASTO WHATSAPP (COPIA INCONTRI PLAYOFF)
+            document.getElementById('share-playoffs-btn')?.addEventListener('click', () => {
+                let textToCopy = `🏆 *AGGIORNAMENTO PLAYOFF* 🏆\n\n`;
+                let foundMatches = false;
+
+                const appendPendingMatches = (bracket, title) => {
+                    if (!bracket) return;
+                    
+                    const getMatches = (b) => {
+                        if (!b) return [];
+                        let m = [];
+                        if (b.matches) m.push(...b.matches);
+                        if (b.nextRound) m.push(...getMatches(b.nextRound));
+                        return m;
+                    };
+                    
+                    const allMatches = getMatches(bracket);
+                    const pendingMatches = allMatches.filter(m => 
+                        m.team1 && m.team1 !== 'TBD' && m.team1 !== 'BYE' &&
+                        m.team2 && m.team2 !== 'TBD' && m.team2 !== 'BYE' &&
+                        !m.winner
+                    );
+
+                    if (pendingMatches.length > 0) {
+                        foundMatches = true;
+                        textToCopy += `🔥 *${title}*\n`;
+                        pendingMatches.forEach(m => {
+                            const t1 = logic.playoffs.participantName(m.team1).replace(/<[^>]*>?/gm, '').replace(/&bull;/g, '-');
+                            const t2 = logic.playoffs.participantName(m.team2).replace(/<[^>]*>?/gm, '').replace(/&bull;/g, '-');
+                            textToCopy += `⚽ ${t1} 🆚 ${t2}\n`;
+                        });
+                        textToCopy += `\n`;
+                    }
+                };
+
+                appendPendingMatches(db.playoffs.mainBracket, 'Tabellone Principale');
+                appendPendingMatches(db.playoffs.thirdPlaceBracket, 'Finalina 3°/4° Posto');
+                appendPendingMatches(db.playoffs.qualificationBracket, 'Turno Preliminare');
+                appendPendingMatches(db.playoffs.fifthPlaceBracket, 'Tabellone 5°/6° Posto');
+                appendPendingMatches(db.playoffs.silverBracket, 'Torneo Silver');
+                appendPendingMatches(db.playoffs.playoutBracket, 'Playout');
+
+                if (!foundMatches) {
+                    ui.showAlert('Non ci sono incontri pronti da giocare in questo momento. Aspetta i risultati!', 'error');
+                    return;
+                }
+
+                navigator.clipboard.writeText(textToCopy.trim()).then(() => {
+                    ui.showAlert('Incontri copiati! Incolla il messaggio su WhatsApp.', 'success');
+                }).catch(() => {
+                    ui.showAlert('Errore nella copia. Riprova.', 'error');
+                });
+            });
 
             document.getElementById('generate-playoffs-btn').addEventListener('click', logic.playoffs.generateBracket);
             document.getElementById('reset-playoffs-btn')?.addEventListener('click', () => {
@@ -2398,7 +2263,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <select id="playoff-size" class="w-full bg-white font-bold text-sky-900 border-sky-300">
                                     <option value="auto" ${db.settings.playoffSize === 'auto' || !db.settings.playoffSize ? 'selected' : ''}>Automatico (Consigliato)</option>
                                     <option value="4" ${db.settings.playoffSize === 4 ? 'selected' : ''}>Top 4 (Solo Semifinali)</option>
+                                    <option value="6" ${db.settings.playoffSize === 6 ? 'selected' : ''}>Top 6 (1° e 2° in Semifinale)</option>
+                                    <option value="7" ${db.settings.playoffSize === 7 ? 'selected' : ''}>Top 7 (1° in Semifinale)</option>
                                     <option value="8" ${db.settings.playoffSize === 8 ? 'selected' : ''}>Top 8 (Quarti di finale)</option>
+                                    <option value="10" ${db.settings.playoffSize === 10 ? 'selected' : ''}>Top 10 (1°-6° ai Quarti)</option>
+                                    <option value="12" ${db.settings.playoffSize === 12 ? 'selected' : ''}>Top 12 (1°-4° ai Quarti)</option>
                                     <option value="16" ${db.settings.playoffSize === 16 ? 'selected' : ''}>Top 16 (Ottavi di finale)</option>
                                 </select>
                                 <p class="text-xs text-sky-700 mt-2">Scegli la grandezza del torneo principale in base agli iscritti.</p>
@@ -2525,7 +2394,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let html = `
                 <div class="max-w-6xl mx-auto pb-8">
-                    <!-- INTESTAZIONE CALENDARIO -->
+                    <!-- INTESTAZIONE CALENDARIO CON TASTO WHATSAPP -->
                     <div class="card no-print flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50 border-slate-200">
                         <div>
                             <h3 class="text-lg font-semibold mb-2 flex items-center gap-2">
@@ -2536,7 +2405,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <div class="px-2 py-1 rounded-full ${totalYellows>0 ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200'} font-bold border tracking-wide uppercase">Avversari Ripetuti: ${totalYellows}</div>
                             </div>
                         </div>
-                        <div class="flex gap-2">
+                        <div class="flex flex-wrap gap-2">
+                             <button id="share-whatsapp-btn" class="btn btn-secondary bg-white border-green-500 text-green-700 hover:bg-green-50 shadow-sm font-bold">
+                                <i data-lucide="share-2" class="w-4 h-4"></i> Copia Turno
+                            </button>
                              <button id="generate-schedule-btn" class="btn btn-primary shadow-sm">
                                 <i data-lucide="plus" class="w-4 h-4"></i> Genera Nuovi Turni
                             </button>
@@ -2607,18 +2479,19 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
                         ` : `
                             <div>
-                                <p class="text-[10px] font-bold uppercase tracking-widest text-emerald-600 mb-3 ml-1">Partite Pronte per i Tavoli Liberi (${freeTables})</p>
+                                <!-- COLORE GIALLO/AMBER RIPRISTINATO QUI -->
+                                <p class="text-[10px] font-bold uppercase tracking-widest text-amber-600 mb-3 ml-1">Partite Pronte per i Tavoli Liberi (${freeTables})</p>
                                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                     ${matchesToShow.map(m => `
-                                        <div class="flex items-center justify-between gap-3 p-3 rounded-lg border border-emerald-100 bg-white shadow-sm hover:border-emerald-300 transition" data-match-container="true">
+                                        <div class="flex items-center justify-between gap-3 p-3 rounded-lg border border-amber-300 bg-amber-50 shadow-sm hover:border-amber-400 transition" data-match-container="true">
                                             <div class="text-sm min-w-0">
-                                                <span class="text-[10px] text-slate-400 font-mono uppercase">Round ${m.round}</span><br>
-                                                <span class="font-medium truncate text-slate-700">${utils.getPlayerById(m.team1.p).name} + ${utils.getPlayerById(m.team1.a).name}</span>
-                                                <span class="text-slate-300 text-xs mx-0.5">vs</span>
-                                                <span class="font-medium truncate text-slate-700">${utils.getPlayerById(m.team2.p).name} + ${utils.getPlayerById(m.team2.a).name}</span>
+                                                <span class="text-[10px] text-amber-700/60 font-mono uppercase font-bold">Round ${m.round}</span><br>
+                                                <span class="font-bold truncate text-slate-800">${utils.getPlayerById(m.team1.p).name} + ${utils.getPlayerById(m.team1.a).name}</span>
+                                                <span class="text-amber-500/50 font-bold text-xs mx-0.5">VS</span>
+                                                <span class="font-bold truncate text-slate-800">${utils.getPlayerById(m.team2.p).name} + ${utils.getPlayerById(m.team2.a).name}</span>
                                             </div>
-                                            <button class="btn btn-sm bg-emerald-100 text-emerald-700 hover:bg-emerald-200 start-match-btn flex-shrink-0" data-id="${m.id}">
-                                                <i data-lucide="play" class="w-4 h-4"></i> Assegna Tavolo
+                                            <button class="btn btn-sm bg-amber-200 text-amber-900 font-bold hover:bg-amber-300 shadow-sm start-match-btn flex-shrink-0" data-id="${m.id}">
+                                                <i data-lucide="play" class="w-4 h-4 text-amber-700"></i> Assegna
                                             </button>
                                         </div>
                                     `).join('')}
@@ -2694,7 +2567,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                                     </div>`;
 
                                                 return `
-                                                    <!-- AGGIUNTO data-match-container="true" QUI -->
                                                     <tr class="${rowClass} border-b border-slate-100 last:border-0 hover:bg-slate-50 transition" data-match-container="true">
                                                         <td class="text-xs text-slate-400 font-mono flex items-center gap-1 py-3">${warnIcon} #${match.round}.${match.id.slice(-4)}</td>
                                                         <td class="font-medium ${pairCounts[k1]>1?'text-red-600 font-bold':''} text-slate-700">${team1Name}</td>
@@ -2724,6 +2596,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
             contentView.innerHTML = html;
             lucide.createIcons();
+
+            // EVENTO TASTO WHATSAPP (COPIA NEGLI APPUNTI)
+            document.getElementById('share-whatsapp-btn')?.addEventListener('click', () => {
+                const inProgress = db.schedule.filter(m => m.inProgress && !m.played);
+                if (inProgress.length === 0) {
+                    ui.showAlert('Non ci sono partite attualmente ai tavoli da condividere!', 'error');
+                    return;
+                }
+                
+                let textToCopy = `🏆 *AGGIORNAMENTO TORNEO* 🏆\n\n🔜 *Partite in corso:*\n`;
+                inProgress.forEach((m, index) => {
+                    const t1p = utils.getPlayerById(m.team1.p).name;
+                    const t1a = utils.getPlayerById(m.team1.a).name;
+                    const t2p = utils.getPlayerById(m.team2.p).name;
+                    const t2a = utils.getPlayerById(m.team2.a).name;
+                    textToCopy += `⚽ *Tavolo ${index + 1}:* ${t1p} e ${t1a} 🆚 ${t2p} e ${t2a}\n`;
+                });
+                
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    ui.showAlert('Partite copiate! Incolla il messaggio su WhatsApp.', 'success');
+                }).catch(() => {
+                    ui.showAlert('Errore nella copia. Riprova.', 'error');
+                });
+            });
 
             document.getElementById('generate-schedule-btn')?.addEventListener('click', logic.schedule.generate);
             document.getElementById('reset-schedule-btn')?.addEventListener('click', () => {
@@ -2758,7 +2654,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
 
-            // LA MAGIA: SALVATAGGIO OTTIMIZZATO SENZA PERDITA FOCUS
             document.querySelectorAll('.autosave-input').forEach(input => {
                 const saveScore = (e) => {
                     const id = e.target.getAttribute('data-id');
@@ -2776,16 +2671,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     logic.schedule.autoSaveResult(id, score1, score2);
                     
                     const isPlayedNow = match ? match.played : false;
-                    
-                    // Ridisegna TUTTO solo se la partita è ufficialmente "finita" o "riaperta".
-                    // Evita di ridisegnare mentre l'utente sta solo digitando il primo numero!
                     if (wasPlayed !== isPlayedNow) {
                         views.renderSchedule();
                     }
                 };
 
-                input.addEventListener('change', saveScore);
+                // Rimuoviamo l'evento 'change' per evitare che la partita si chiuda mentre usi le freccette
                 input.addEventListener('blur', saveScore);
+                
+                // Salviamo comodamente anche se l'utente preme il tasto "Invio" sulla tastiera
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.target.blur(); // Togliendo il focus, fa scattare in automatico il salvataggio
+                    }
+                });
             });
         },
 
@@ -2793,9 +2692,29 @@ document.addEventListener('DOMContentLoaded', () => {
             const tvContent = document.getElementById('tv-content');
             if (!tvContent) return;
 
-            const liveMatches = db.schedule.filter(m => m.inProgress && !m.played);
-            const standings = utils.getStandings().slice(0, 10);
+            // 1. IL MOTORE SEGRETO: Legge i dati aggiornati dal disco in background!
+            try {
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    const val = localStorage.getItem(key);
+                    if (val && val.includes('"players"') && val.includes('"schedule"')) {
+                        const freshData = JSON.parse(val);
+                        // Aggiorna il "cervello" della TV con i dati freschi dell'altra scheda
+                        db.players = freshData.players || db.players;
+                        db.schedule = freshData.schedule || db.schedule;
+                        db.settings = freshData.settings || db.settings;
+                        break; // Dati trovati e caricati, esce dal ciclo
+                    }
+                }
+            } catch (e) {
+                console.error("Errore lettura dati TV:", e);
+            }
 
+            // 2. PREPARAZIONE DATI
+            const liveMatches = db.schedule.filter(m => m.inProgress && !m.played);
+            const standings = utils.getStandings(); // Prende tutta la classifica intera
+
+            // 3. GRAFICA
             let html = `
                 <!-- Colonna Sinistra: Partite Live -->
                 <div>
@@ -2819,9 +2738,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     `).join('')}
                 </div>
 
-                <!-- Colonna Destra: Classifica -->
+                <!-- Colonna Destra: Classifica Completa -->
                 <div class="tv-card">
-                    <h2 class="tv-section-title"><i data-lucide="trophy" class="w-6 h-6 text-amber-500"></i> Top 10 Classifica</h2>
+                    <h2 class="tv-section-title"><i data-lucide="trophy" class="w-6 h-6 text-amber-500"></i> Classifica Completa</h2>
                     <table class="tv-standings-table">
                         <thead>
                             <tr>
@@ -2850,14 +2769,21 @@ document.addEventListener('DOMContentLoaded', () => {
             tvContent.innerHTML = html;
             lucide.createIcons();
 
+            // 4. TIMER DI AUTO-AGGIORNAMENTO
             if (!views.tvInterval) {
                 views.tvInterval = setInterval(() => {
-                    if (!document.getElementById('tv-modal').classList.contains('hidden')) {
+                    const modal = document.getElementById('tv-modal');
+                    // Se la modale è aperta, aggiorna tutto (pescando i nuovi dati)
+                    if (modal && !modal.classList.contains('hidden')) {
                         views.renderTvMode();
+                    } else {
+                        // Se chiudi la TV, spegne il timer per non affaticare il PC
+                        clearInterval(views.tvInterval);
+                        views.tvInterval = null;
                     }
-                }, 10000);
+                }, 5000); // Aggiorna ogni 5 secondi!
             }
-        }
+        },
     };
 
 

@@ -2309,92 +2309,116 @@ document.addEventListener('DOMContentLoaded', () => {
 
         renderSettings: () => {
             let html = `
-                <div class="card no-print">
-                    <h3 class="text-xl font-semibold mb-4 border-b pb-2">Regole di Punteggio (Vittorie di Misura)</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8 bg-slate-50 p-6 rounded-lg border border-slate-200">
-                        <div>
-                            <label class="block text-sm font-bold text-slate-700 mb-1">Punti Vittoria Netta (>1 gol)</label>
-                            <input type="number" id="points-win" value="${db.settings.pointsWin}" min="0">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-bold text-slate-700 mb-1">Punti Vittoria di Misura (1 gol)</label>
-                            <input type="number" id="points-win-narrow" value="${db.settings.pointsWinNarrow ?? 2}" min="0">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-bold text-slate-700 mb-1">Punti Pareggio</label>
-                            <input type="number" id="points-draw" value="${db.settings.pointsDraw}" min="0">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-bold text-slate-700 mb-1">Punti Sconfitta di Misura (1 gol)</label>
-                            <input type="number" id="points-loss-narrow" value="${db.settings.pointsLossNarrow ?? 1}" min="0">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-bold text-slate-700 mb-1">Punti Sconfitta Netta</label>
-                            <input type="number" id="points-loss" value="${db.settings.pointsLoss}" min="0">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-bold text-slate-700 mb-1">Gol Target Vittoria</label>
-                            <input type="number" id="score-target" value="${db.settings.scoreTarget}" min="1" max="20">
-                        </div>
-                    </div>
-
-                    <h3 class="text-xl font-semibold mb-4 border-b pb-2">Generazione Calendario & Playoff</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                        <div>
-                            <label class="block text-sm font-bold text-slate-700 mb-1">Partite Target per Giocatore</label>
-                            <input type="number" id="rounds-target" value="${db.settings.rounds}" min="1">
-                            <p class="text-xs text-slate-500 mt-1">L'algoritmo Zero Tolerance calcolerà le rotazioni su questa base.</p>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-bold text-slate-700 mb-1">Formazione squadre</label>
-                            <select id="team-formation-mode">
-                                <option value="balanced-random" ${db.settings.teamFormationMode === 'balanced-random' || !db.settings.teamFormationMode ? 'selected' : ''}>Casuale equilibrato</option>
-                                <option value="random" ${db.settings.teamFormationMode === 'random' ? 'selected' : ''}>Casuale puro</option>
-                                <option value="max-balance" ${db.settings.teamFormationMode === 'max-balance' ? 'selected' : ''}>Massimo equilibrio</option>
-                            </select>
-                            <p class="text-xs text-slate-500 mt-1">Influisce sul sorteggio e sul rimescolamento delle coppie tra i turni.</p>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-bold text-slate-700 mb-1">Finalisti per ruolo</label>
-                            <select id="playoff-role-size">
-                                <option value="6" ${db.settings.playoffRoleSize === 6 ? 'selected' : ''}>6+6: 2 dirette, 2 preliminari</option>
-                                <option value="7" ${db.settings.playoffRoleSize === 7 ? 'selected' : ''}>7+7: 1 diretta, 3 preliminari</option>
-                                <option value="8" ${db.settings.playoffRoleSize === 8 || ![6, 7].includes(db.settings.playoffRoleSize) ? 'selected' : ''}>8+8: 0 dirette, 4 preliminari</option>
-                            </select>
-                            <p class="text-xs text-slate-500 mt-1">Sono disponibili solo combinazioni che producono 4 semifinaliste.</p>
-                        </div>
-                        <div>
-                            <label class="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1">
-                                <input type="checkbox" id="playoff-fifth-place" ${db.settings.playoffFifthPlaceEnabled ? 'checked' : ''}>
-                                Tabellone 5°/6° posto con le perdenti dei quarti
-                            </label>
-                            <p class="text-xs text-slate-500 mt-1">Disponibile per 8+8: 2 semifinali e finale; il playout diventa la finalina per 6° posto.</p>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-bold text-slate-700 mb-1">Gol Target Playoff</label>
-                            <input type="number" id="playoff-score-target" value="${db.settings.playoffScoreTarget}" min="1" max="20">
-                            <p class="text-xs text-slate-500 mt-1">Punteggio per vincere una partita playoff (di solito diverso da quello dei gironi).</p>
-                        </div>
-                    </div>
+                <!-- Aggiunto max-w-5xl mx-auto per limitare la larghezza su schermi grandi -->
+                <div class="max-w-5xl mx-auto pb-8">
                     
-                    <button id="save-settings-btn" class="btn btn-success mt-4">
-                        <i data-lucide="save" class="w-4 h-4"></i> Salva Impostazioni
-                    </button>
-                </div>
+                    <!-- REGOLE DI PUNTEGGIO -->
+                    <div class="card no-print">
+                        <h3 class="text-xl font-semibold mb-6 border-b pb-2 flex items-center gap-2">
+                            <i data-lucide="calculator" class="w-5 h-5 text-slate-500"></i> 
+                            Regole di Punteggio (Vittorie di Misura)
+                        </h3>
+                        
+                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                <label class="block text-[10px] uppercase tracking-wide font-bold text-slate-500 mb-1">Vittoria Netta (>1 gol)</label>
+                                <input type="number" id="points-win" value="${db.settings.pointsWin}" min="0" class="font-bold text-lg text-slate-800 bg-white">
+                            </div>
+                            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                <label class="block text-[10px] uppercase tracking-wide font-bold text-slate-500 mb-1">Vittoria Misura (1 gol)</label>
+                                <input type="number" id="points-win-narrow" value="${db.settings.pointsWinNarrow ?? 2}" min="0" class="font-bold text-lg text-slate-800 bg-white">
+                            </div>
+                            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                <label class="block text-[10px] uppercase tracking-wide font-bold text-slate-500 mb-1">Pareggio</label>
+                                <input type="number" id="points-draw" value="${db.settings.pointsDraw}" min="0" class="font-bold text-lg text-slate-800 bg-white">
+                            </div>
+                            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                <label class="block text-[10px] uppercase tracking-wide font-bold text-slate-500 mb-1">Sconfitta Misura (1 gol)</label>
+                                <input type="number" id="points-loss-narrow" value="${db.settings.pointsLossNarrow ?? 1}" min="0" class="font-bold text-lg text-slate-800 bg-white">
+                            </div>
+                            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                <label class="block text-[10px] uppercase tracking-wide font-bold text-slate-500 mb-1">Sconfitta Netta</label>
+                                <input type="number" id="points-loss" value="${db.settings.pointsLoss}" min="0" class="font-bold text-lg text-slate-800 bg-white">
+                            </div>
+                            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                <label class="block text-[10px] uppercase tracking-wide font-bold text-slate-500 mb-1">Gol Target Vittoria</label>
+                                <input type="number" id="score-target" value="${db.settings.scoreTarget}" min="1" max="20" class="font-bold text-lg text-slate-800 bg-white">
+                            </div>
+                        </div>
+                    </div>
 
-                <div class="card no-print border-red-200 bg-red-50">
-                    <h3 class="text-xl font-semibold mb-2 text-red-700">Zona Pericolosa</h3>
-                    <p class="text-sm text-slate-600 mb-1"><b>Reset Giocatori</b>: cancella giocatori, calendario e playoff. Le impostazioni (punteggi, regole) restano invariate. Utile per iniziare un nuovo torneo.</p>
-                    <p class="text-sm text-slate-600 mb-4"><b>Reset Totale Database</b>: cancella tutto, incluse le impostazioni. L'azione è irreversibile.</p>
-                    <div class="flex gap-2 flex-wrap">
-                        <button id="reset-players-btn" class="btn btn-danger">
-                            <i data-lucide="users" class="w-4 h-4"></i> Reset Giocatori
-                        </button>
-                        <button id="reset-all-btn" class="btn btn-danger">
-                            <i data-lucide="alert-triangle" class="w-4 h-4"></i> Reset Totale Database
+                    <!-- GENERAZIONE CALENDARIO -->
+                    <div class="card no-print">
+                        <h3 class="text-xl font-semibold mb-6 border-b pb-2 flex items-center gap-2">
+                            <i data-lucide="settings-2" class="w-5 h-5 text-slate-500"></i> 
+                            Generazione Calendario & Playoff
+                        </h3>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                                <label class="block text-xs uppercase tracking-wide font-bold text-slate-500 mb-2">Partite Target per Giocatore</label>
+                                <input type="number" id="rounds-target" value="${db.settings.rounds}" min="1" class="mb-2">
+                                <p class="text-xs text-slate-500">L'algoritmo Zero Tolerance calcolerà le rotazioni su questa base.</p>
+                            </div>
+                            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                                <label class="block text-xs uppercase tracking-wide font-bold text-slate-500 mb-2">Formazione squadre</label>
+                                <select id="team-formation-mode" class="mb-2">
+                                    <option value="balanced-random" ${db.settings.teamFormationMode === 'balanced-random' || !db.settings.teamFormationMode ? 'selected' : ''}>Casuale equilibrato</option>
+                                    <option value="random" ${db.settings.teamFormationMode === 'random' ? 'selected' : ''}>Casuale puro</option>
+                                    <option value="max-balance" ${db.settings.teamFormationMode === 'max-balance' ? 'selected' : ''}>Massimo equilibrio</option>
+                                </select>
+                                <p class="text-xs text-slate-500">Influisce sul sorteggio e sul rimescolamento delle coppie tra i turni.</p>
+                            </div>
+                            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                                <label class="block text-xs uppercase tracking-wide font-bold text-slate-500 mb-2">Finalisti per ruolo</label>
+                                <select id="playoff-role-size" class="mb-2">
+                                    <option value="6" ${db.settings.playoffRoleSize === 6 ? 'selected' : ''}>6+6: 2 dirette, 2 preliminari</option>
+                                    <option value="7" ${db.settings.playoffRoleSize === 7 ? 'selected' : ''}>7+7: 1 diretta, 3 preliminari</option>
+                                    <option value="8" ${db.settings.playoffRoleSize === 8 || ![6, 7].includes(db.settings.playoffRoleSize) ? 'selected' : ''}>8+8: 0 dirette, 4 preliminari</option>
+                                </select>
+                                <p class="text-xs text-slate-500">Sono disponibili solo combinazioni che producono 4 semifinaliste.</p>
+                            </div>
+                            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                                <label class="block text-xs uppercase tracking-wide font-bold text-slate-500 mb-2">Gol Target Playoff</label>
+                                <input type="number" id="playoff-score-target" value="${db.settings.playoffScoreTarget}" min="1" max="20" class="mb-2">
+                                <p class="text-xs text-slate-500">Punteggio per vincere una partita playoff (di solito diverso da quello dei gironi).</p>
+                            </div>
+                        </div>
+
+                        <!-- Checkbox stilizzata -->
+                        <label class="flex items-start gap-3 p-4 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100 transition mb-6">
+                            <div class="mt-0.5">
+                                <input type="checkbox" id="playoff-fifth-place" class="w-4 h-4 text-blue-600 rounded" ${db.settings.playoffFifthPlaceEnabled ? 'checked' : ''}>
+                            </div>
+                            <div>
+                                <span class="block text-sm font-bold text-slate-800">Abilita Tabellone 5°/6° posto</span>
+                                <span class="block text-xs text-slate-500 mt-1">Disponibile per 8+8. Genera 2 semifinali e finale per le perdenti dei quarti. Il playout diventa la finalina per 6° posto.</span>
+                            </div>
+                        </label>
+                        
+                        <button id="save-settings-btn" class="btn btn-success">
+                            <i data-lucide="save" class="w-4 h-4"></i> Salva Impostazioni
                         </button>
                     </div>
-                </div>
+
+                    <!-- ZONA PERICOLOSA -->
+                    <div class="card no-print border-red-200 bg-red-50">
+                        <h3 class="text-xl font-semibold mb-2 text-red-700 flex items-center gap-2">
+                            <i data-lucide="alert-triangle" class="w-5 h-5"></i> Zona Pericolosa
+                        </h3>
+                        <p class="text-sm text-slate-600 mb-1"><b>Reset Giocatori</b>: cancella giocatori, calendario e playoff. Le impostazioni (punteggi, regole) restano invariate. Utile per iniziare un nuovo torneo.</p>
+                        <p class="text-sm text-slate-600 mb-4"><b>Reset Totale Database</b>: cancella tutto, incluse le impostazioni. L'azione è irreversibile.</p>
+                        <div class="flex gap-2 flex-wrap">
+                            <button id="reset-players-btn" class="btn btn-danger">
+                                <i data-lucide="users" class="w-4 h-4"></i> Reset Giocatori
+                            </button>
+                            <button id="reset-all-btn" class="btn btn-danger">
+                                <i data-lucide="alert-triangle" class="w-4 h-4"></i> Reset Totale
+                            </button>
+                        </div>
+                    </div>
+
+                </div> <!-- Fine max-w-5xl -->
             `;
             
             contentView.innerHTML = html;

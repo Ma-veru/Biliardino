@@ -42,9 +42,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Stato UI locale (non salvato su disco): tiene traccia dei round aperti/chiusi
-    // manualmente dall'operatore, per prevalere sul comportamento automatico
-    // (i round completati si chiudono da soli, ma l'operatore può riaprirli).
     let roundCollapseOverrides = {};
 
     // Riferimenti DOM
@@ -62,6 +59,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // 2. GESTIONE STORIA (UNDO/REDO)
     // ==========================================
+    const MAX_HISTORY_STEPS = 25;
+
     const saveHistory = () => {
         db.history = db.history.slice(0, db.historyIndex + 1);
         db.history.push(JSON.stringify({
@@ -70,6 +69,9 @@ document.addEventListener('DOMContentLoaded', () => {
             settings: db.settings,
             playoffs: db.playoffs
         }));
+        if (db.history.length > MAX_HISTORY_STEPS) {
+            db.history.shift();
+        }
         db.historyIndex = db.history.length - 1;
         updateHistoryButtons();
     };
@@ -105,9 +107,26 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ==========================================
-    // 3. UTILITY (MATEMATICA E CLASSIFICA)
+    // 3. UTILITY (MATEMATICA, CLASSIFICA E SICUREZZA)
     // ==========================================
     const utils = {
+        // SICUREZZA: Previene attacchi XSS base e limita la lunghezza
+        sanitizeString: (str) => {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/[<>]/g, '') // Rimuove tag HTML
+                .trim()
+                .substring(0, 50); // Previene stringhe maligne troppo lunghe
+        },
+        escapeHtml: (str) => {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        },
         generateId: () => '_' + Math.random().toString(36).substr(2, 9),
         getPlayersByRole: (role) => db.players.filter(p => p.role === role),
         getPlayerById: (id) => db.players.find(p => p.id === id),
@@ -274,16 +293,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const logic = {
         player: {
             add: (name, role) => {
-                if (!name || !role) { ui.showAlert('Nome e Ruolo sono obbligatori.', 'error'); return; }
-                if (db.players.some(p => p.name.toLowerCase() === name.toLowerCase())) { ui.showAlert('Giocatore già esistente.', 'error'); return; }
+                const safeName = utils.sanitizeString(name); // Sanitizzazione ingresso
+                if (!safeName || !role) { ui.showAlert('Nome e Ruolo sono obbligatori.', 'error'); return; }
+                if (db.players.some(p => p.name.toLowerCase() === safeName.toLowerCase())) { ui.showAlert('Giocatore già esistente.', 'error'); return; }
                 saveHistory();
-                db.players.push({ id: utils.generateId(), name: name, role: role });
+                db.players.push({ id: utils.generateId(), name: safeName, role: role });
                 ui.showAlert(`Giocatore aggiunto.`, 'success');
                 views.renderPlayers();
             },
             addBulk: (rawNames, role) => {
                 if (!role) { ui.showAlert('Seleziona un ruolo', 'error'); return; }
-                const names = rawNames.split('\n').map(n => n.trim()).filter(n => n.length > 0);
+                const names = rawNames.split('\n')
+                                      .map(n => utils.sanitizeString(n)) // Sanitizzazione lista
+                                      .filter(n => n.length > 0);
                 if (names.length === 0) { ui.showAlert('Nessun nome valido inserito.', 'error'); return; }
                 
                 saveHistory();
@@ -303,11 +325,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 ui.showAlert('Giocatore rimosso e calendario aggiornato.', 'warning');
             },
             updateName: (id, newName) => {
-                if (!newName.trim()) { ui.showAlert('Il nome non può essere vuoto.', 'error'); return false; }
-                if (db.players.filter(p => p.id !== id).some(p => p.name.toLowerCase() === newName.trim().toLowerCase())) { ui.showAlert('Nome già in uso.', 'error'); return false; }
+                const safeName = utils.sanitizeString(newName); // Sanitizzazione
+                if (!safeName) { ui.showAlert('Il nome non può essere vuoto o non valido.', 'error'); return false; }
+                if (db.players.filter(p => p.id !== id).some(p => p.name.toLowerCase() === safeName.toLowerCase())) { ui.showAlert('Nome già in uso.', 'error'); return false; }
                 saveHistory();
                 const player = utils.getPlayerById(id);
-                if (player) { player.name = newName.trim(); ui.showAlert(`Nome aggiornato in ${newName}.`, 'success'); reloadFullUI(); return true; }
+                if (player) { player.name = safeName; ui.showAlert(`Nome aggiornato in ${safeName}.`, 'success'); reloadFullUI(); return true; }
                 return false;
             }
         },
@@ -345,7 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             runZeroTolerance: (P, A) => {
                 const targetGames = db.settings.rounds;
-                const MAX_RETRIES = 2000; // Alzato a 2000 interi tornei
+                const MAX_RETRIES = 2000; 
                 
                 let bestSchedule = null;
                 let bestScore = Infinity;
@@ -368,7 +391,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 if (bestSchedule) {
-                    // Ottimizzatore Potenziato per radere al suolo i gialli
                     bestSchedule = logic.schedule.optimizeYellows(bestSchedule);
                     
                     saveHistory();
@@ -401,7 +423,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 for (let round = 1; round <= targetGames; round++) {
                     
-                    // Rimescolamento Assoluto: Raggruppa chi ha le stesse partite, li mischia e poi li accoda
                     const getShuffledByCount = (players) => {
                         let groups = {};
                         players.forEach(p => {
@@ -441,13 +462,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                 balanceScore += Math.abs((playerStrengths[roundP[j].id] || 0) - (playerStrengths[roundA[j].id] || 0));
                             }
                         }
-                        const permutationScore = currentReds * 10000 + balanceScore * (formationMode === 'max-balance' ? 10 : 1);
-                        const currentBestScore = minRoundReds * 10000 + bestPermutationScore;
-                        if (formationMode === 'random' ? i === 0 : permutationScore < currentBestScore) {
+                        const permutationScore = currentReds * 10000 + (formationMode !== 'random' ? balanceScore * (formationMode === 'max-balance' ? 10 : 1) : 0);
+                        const currentBestScore = minRoundReds * 10000 + (formationMode !== 'random' ? bestPermutationScore : 0);
+                        if (permutationScore < currentBestScore || bestPermutation === null) {
                             minRoundReds = currentReds;
                             bestPermutationScore = balanceScore * (formationMode === 'max-balance' ? 10 : 1);
                             bestPermutation = [...roundA];
-                            if (formationMode !== 'max-balance' && minRoundReds === 0) break;
+                            if (minRoundReds === 0 && (formationMode === 'random' || formationMode !== 'max-balance')) break;
                         }
                     }
 
@@ -534,7 +555,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 let currentY = logic.schedule.calculateYellows(current);
                 const rounds = [...new Set(current.map(m=>m.round))];
                 
-                // Forza Bruta a 20.000 iterazioni con Sblocco Intelligente
                 for(let i=0; i<20000; i++) { 
                     if(currentY === 0) break;
                     const r = rounds[Math.floor(Math.random()*rounds.length)];
@@ -557,12 +577,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     const newY = logic.schedule.calculateYellows(current);
                     
                     if(newY < currentY) {
-                        currentY = newY; // Miglioramento netto
+                        currentY = newY; 
                     } else if (newY === currentY && Math.random() < 0.1) {
-                        // Accetta un cambio "neutrale" il 10% delle volte per sbloccarsi
                         currentY = newY;
                     } else { 
-                        // Torna indietro
                         m1.team2 = t2_1; 
                         m2.team2 = t2_2; 
                     }
@@ -596,7 +614,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
 
-                    localStorage.setItem('torneoGialloDB', JSON.stringify(db));
+                    flushStateToStorage();
                 }
             },
 
@@ -620,9 +638,9 @@ document.addEventListener('DOMContentLoaded', () => {
         playoffs: {
             participantName: (participant) => {
                 if (!participant || participant === 'TBD' || participant === 'BYE') return participant;
-                if (typeof participant === 'object') return participant.name;
+                if (typeof participant === 'object') return utils.escapeHtml(participant.name);
                 const player = utils.getPlayerById(participant);
-                return player ? player.name : participant;
+                return player ? utils.escapeHtml(player.name) : utils.escapeHtml(participant);
             },
             participantKey: (participant) => participant && typeof participant === 'object' ? participant.id : participant,
             sameParticipant: (first, second) => logic.playoffs.participantKey(first) === logic.playoffs.participantKey(second),
@@ -641,11 +659,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const winners = completedRound.matches.map(match => logic.playoffs.getMatchWinner(match));
                 if (winners.some(winner => !winner)) return;
 
-                completedRound.nextRound.matches.forEach((match, index) => {
-                    match.team1 = winners[index * 2] || 'TBD';
-                    match.team2 = winners[index * 2 + 1] || 'TBD';
-                });
-
                 const players = winners.flatMap(team => {
                     const storedTeam = typeof team === 'object' ? team : db.playoffs.teams[team];
                     return storedTeam?.players || [];
@@ -656,7 +669,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                const remixedTeams = logic.playoffs.createBalancedTeams(goalkeepers, attackers);
+                const forbiddenPairs = new Set();
+                completedRound.matches.forEach(match => {
+                    [match.team1, match.team2].forEach(teamRef => {
+                        const team = typeof teamRef === 'object' ? teamRef : db.playoffs.teams[teamRef];
+                        if (team?.players && team.players.length === 2) {
+                            forbiddenPairs.add(`${team.players[0]}_${team.players[1]}`);
+                            forbiddenPairs.add(`${team.players[1]}_${team.players[0]}`);
+                        }
+                    });
+                });
+
+                const remixedTeams = logic.playoffs.createBalancedTeams(goalkeepers, attackers, forbiddenPairs);
                 completedRound.nextRound.matches.forEach((match, index) => {
                     match.team1 = remixedTeams[index * 2] || 'TBD';
                     match.team2 = remixedTeams[index * 2 + 1] || 'TBD';
@@ -668,25 +692,67 @@ document.addEventListener('DOMContentLoaded', () => {
                 let currentRound = bracket;
                 while (currentRound?.nextRound) {
                     const nextRound = currentRound.nextRound;
-                    const needsSync = nextRound.matches.some(match => match.team1 === 'TBD' || match.team2 === 'TBD');
-                    if (needsSync && currentRound.matches.every(match => logic.playoffs.getMatchWinner(match))) {
-                        logic.playoffs.remixWinnersForNextRound(bracket, currentRound);
+                    const allCompleted = currentRound.matches.every(match => logic.playoffs.getMatchWinner(match));
+                    if (allCompleted) {
+                        const needsSync = nextRound.matches.some(match => match.team1 === 'TBD' || match.team2 === 'TBD');
+                        
+                        const isUnplayed = nextRound.matches.every(match => match.score1 === null && match.score2 === null);
+                        let hasForbiddenRepeat = false;
+                        if (isUnplayed) {
+                            const prevPairs = new Set();
+                            currentRound.matches.forEach(m => {
+                                const w = logic.playoffs.getMatchWinner(m);
+                                const t = typeof w === 'object' ? w : db.playoffs.teams[w];
+                                if (t?.players && t.players.length === 2) {
+                                    prevPairs.add(`${t.players[0]}_${t.players[1]}`);
+                                    prevPairs.add(`${t.players[1]}_${t.players[0]}`);
+                                }
+                            });
+                            nextRound.matches.forEach(m => {
+                                [m.team1, m.team2].forEach(tr => {
+                                    const t = typeof tr === 'object' ? tr : db.playoffs.teams[tr];
+                                    if (t?.players && t.players.length === 2) {
+                                        if (prevPairs.has(`${t.players[0]}_${t.players[1]}`)) {
+                                            hasForbiddenRepeat = true;
+                                        }
+                                    }
+                                });
+                            });
+                        }
+
+                        if (needsSync || hasForbiddenRepeat) {
+                            logic.playoffs.remixWinnersForNextRound(bracket, currentRound);
+                        }
                     }
                     currentRound = nextRound;
                 }
             },
             remixTeams: (teams) => {
-                const players = teams.flatMap(team => team?.players || []);
+                const forbiddenPairs = new Set();
+                teams.forEach(teamRef => {
+                    const team = typeof teamRef === 'object' ? teamRef : db.playoffs.teams[teamRef];
+                    if (team?.players && team.players.length === 2) {
+                        forbiddenPairs.add(`${team.players[0]}_${team.players[1]}`);
+                        forbiddenPairs.add(`${team.players[1]}_${team.players[0]}`);
+                    }
+                });
+                const players = teams.flatMap(team => {
+                    const storedTeam = typeof team === 'object' ? team : db.playoffs.teams[team];
+                    return storedTeam?.players || [];
+                });
                 const goalkeepers = players.map(id => utils.getPlayerById(id)).filter(player => player?.role === 'Portiere');
                 const attackers = players.map(id => utils.getPlayerById(id)).filter(player => player?.role === 'Attaccante');
                 return goalkeepers.length === attackers.length && goalkeepers.length >= 2
-                    ? logic.playoffs.createBalancedTeams(goalkeepers, attackers)
+                    ? logic.playoffs.createBalancedTeams(goalkeepers, attackers, forbiddenPairs)
                     : teams;
             },
-            createBalancedTeams: (goalkeepers, attackers) => {
+            createBalancedTeams: (goalkeepers, attackers, forbiddenPairs = new Set()) => {
                 db.playoffs.teams = db.playoffs.teams || {};
                 const count = Math.min(goalkeepers.length, attackers.length);
+                if (count === 0) return [];
+
                 const mode = db.settings.teamFormationMode || 'balanced-random';
+                const playerStrengths = utils.getPlayerStrengths();
                 const candidates = [];
                 const attempts = mode === 'max-balance' ? 1000 : 250;
 
@@ -694,37 +760,48 @@ document.addEventListener('DOMContentLoaded', () => {
                     const shuffledGoalkeepers = utils.shuffleArray([...goalkeepers]);
                     const shuffledAttackers = utils.shuffleArray([...attackers]);
                     const candidate = [];
+                    let forbiddenCount = 0;
+
                     for (let index = 0; index < count; index++) {
                         const goalkeeper = shuffledGoalkeepers[index];
                         const attacker = shuffledAttackers[index];
-                        candidate.push({ goalkeeper, attacker, strength: goalkeeper.Pts + attacker.Pts });
+                        if (forbiddenPairs.has(`${goalkeeper.id}_${attacker.id}`) || forbiddenPairs.has(`${attacker.id}_${goalkeeper.id}`)) {
+                            forbiddenCount++;
+                        }
+                        const gPts = Number.isFinite(goalkeeper?.Pts) ? goalkeeper.Pts : (playerStrengths[goalkeeper?.id] || 0);
+                        const aPts = Number.isFinite(attacker?.Pts) ? attacker.Pts : (playerStrengths[attacker?.id] || 0);
+                        const strength = gPts + aPts;
+                        candidate.push({ goalkeeper, attacker, strength });
                     }
 
                     const strengths = candidate.map(team => team.strength);
-                    const average = strengths.reduce((sum, strength) => sum + strength, 0) / strengths.length;
+                    const average = strengths.length > 0 ? (strengths.reduce((sum, strength) => sum + strength, 0) / strengths.length) : 0;
                     const balanceScore = strengths.reduce((sum, strength) => sum + Math.abs(strength - average), 0);
-                    candidates.push({ candidate, balanceScore });
+                    candidates.push({ candidate, balanceScore, forbiddenCount });
                 }
 
+                candidates.sort((a, b) => a.forbiddenCount - b.forbiddenCount || a.balanceScore - b.balanceScore);
+                const minForbidden = candidates[0]?.forbiddenCount || 0;
+                const eligible = candidates.filter(item => item.forbiddenCount === minForbidden);
+
+                let selectedCandidate;
                 if (mode === 'random') {
-                    candidates.sort(() => Math.random() - 0.5);
+                    selectedCandidate = eligible[Math.floor(Math.random() * eligible.length)]?.candidate;
                 } else {
-                    candidates.sort((a, b) => a.balanceScore - b.balanceScore);
-                    const bestScore = candidates[0]?.balanceScore || 0;
+                    const bestScore = eligible[0]?.balanceScore || 0;
                     const tolerance = Math.max(4, bestScore * 0.5);
-                    const acceptable = candidates.filter(item => item.balanceScore <= bestScore + tolerance);
-                    const pool = acceptable.length > 1 ? acceptable : candidates.slice(0, Math.min(10, candidates.length));
-                    const selected = pool[Math.floor(Math.random() * pool.length)];
-                    candidates.splice(0, candidates.length, selected);
+                    const acceptable = eligible.filter(item => item.balanceScore <= bestScore + tolerance);
+                    const pool = acceptable.length > 1 ? acceptable : eligible.slice(0, Math.min(10, eligible.length));
+                    selectedCandidate = pool[Math.floor(Math.random() * pool.length)]?.candidate;
                 }
 
-                const selected = candidates[Math.floor(Math.random() * candidates.length)]?.candidate || [];
+                const selected = selectedCandidate || eligible[0]?.candidate || candidates[0]?.candidate || [];
                 const teams = selected.map(({ goalkeeper, attacker, strength }) => {
                     const team = {
                         id: `team-${goalkeeper.id}-${attacker.id}`,
                         name: `${goalkeeper.name} + ${attacker.name}`,
                         players: [goalkeeper.id, attacker.id],
-                        strength
+                        strength: Number.isFinite(strength) ? strength : 0
                     };
                     db.playoffs.teams[team.id] = team;
                     return team;
@@ -801,7 +878,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         id: `team-${goalkeeper.id}-${attacker.id}`,
                         name: `${goalkeeper.name} + ${attacker.name}`,
                         players: [goalkeeper.id, attacker.id],
-                        strength: goalkeeper.Pts + attacker.Pts
+                        strength: (Number.isFinite(goalkeeper?.Pts) ? goalkeeper.Pts : 0) + (Number.isFinite(attacker?.Pts) ? attacker.Pts : 0)
                     };
                     db.playoffs.teams[team.id] = team;
                     return team;
@@ -876,7 +953,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     roundNum++;
                 }
 
-                // Avanzamento automatico dei turni liberi (BYE), senza richiedere un click manuale
                 logic.playoffs.autoAdvanceByes(bracket);
 
                 return bracket;
@@ -1059,7 +1135,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 ui.showAlert('Playoff azzerati. Giocatori e calendario sono stati mantenuti.', 'warning');
             },
             saveToJSON: () => {
-                const dataStr = JSON.stringify(db, null, 2);
+                const stateToExport = {
+                    players: db.players,
+                    schedule: db.schedule,
+                    settings: db.settings,
+                    playoffs: db.playoffs
+                };
+                const dataStr = JSON.stringify(stateToExport, null, 2);
                 logic.data.downloadFile(dataStr, 'torneo_giallo_backup.json', 'application/json');
             },
             loadFromJSON: (event) => {
@@ -1069,21 +1151,36 @@ document.addEventListener('DOMContentLoaded', () => {
                 reader.onload = (e) => {
                     try {
                         const importedDB = JSON.parse(e.target.result);
-                        if (importedDB.players && importedDB.settings) {
-                            saveHistory();
-                            db = {
-                                ...db,
-                                ...importedDB,
-                                settings: { ...db.settings, ...(importedDB.settings || {}) },
-                                playoffs: { ...db.playoffs, ...(importedDB.playoffs || {}) }
-                            };
-                            reloadFullUI(); 
-                            ui.showAlert('Dati importati con successo!', 'success');
-                        } else {
-                            ui.showAlert('File JSON non valido o incompleto.', 'error');
+                        if (!importedDB || typeof importedDB !== 'object' || !Array.isArray(importedDB.players) || !importedDB.settings) {
+                            ui.showAlert('File JSON non valido: assicurati che sia un backup generato da questa app.', 'error');
+                            return;
                         }
+                        
+                        // Validazione di sicurezza della lista giocatori: Assicuriamoci che i nomi siano sanitizzati all'import
+                        importedDB.players = importedDB.players.map(p => ({
+                            ...p,
+                            name: utils.sanitizeString(p.name)
+                        })).filter(p => p.name !== '');
+
+                        const hasInvalidPlayer = importedDB.players.length === 0 && e.target.result.includes('players');
+                        if (hasInvalidPlayer) {
+                            ui.showAlert('Il file contiene record giocatori incompleti o danneggiati.', 'error');
+                            return;
+                        }
+
+                        db = {
+                            ...db,
+                            ...importedDB,
+                            history: [],
+                            historyIndex: -1,
+                            settings: { ...db.settings, ...(importedDB.settings || {}) },
+                            playoffs: { ...db.playoffs, ...(importedDB.playoffs || {}) }
+                        };
+                        saveHistory();
+                        reloadFullUI(); 
+                        ui.showAlert('Dati importati con successo!', 'success');
                     } catch (err) {
-                        ui.showAlert(`Errore importazione: ${err.message}`, 'error');
+                        ui.showAlert(`Errore durante la lettura del file: ${err.message}`, 'error');
                     }
                 };
                 reader.readAsText(file);
@@ -1251,22 +1348,31 @@ document.addEventListener('DOMContentLoaded', () => {
             const A = utils.getPlayersByRole('Attaccante');
             
             let sortMode = document.getElementById('player-sort-mode')?.value || 'P_first';
+            let searchQuery = document.getElementById('player-search')?.value.toLowerCase() || '';
             
             const getPlayerListToRender = (mode) => {
                 const portieri_sorted = utils.getPlayersByRole('Portiere').sort((a, b) => a.name.localeCompare(b.name));
                 const attaccanti_sorted = utils.getPlayersByRole('Attaccante').sort((a, b) => a.name.localeCompare(b.name));
 
-                if (mode === 'P_first') return [...portieri_sorted, ...attaccanti_sorted];
-                if (mode === 'A_first') return [...attaccanti_sorted, ...portieri_sorted];
-                if (mode === 'alternate') {
-                     let list = []; let p_idx = 0; let a_idx = 0;
+                let list = [];
+                if (mode === 'P_first') list = [...portieri_sorted, ...attaccanti_sorted];
+                else if (mode === 'A_first') list = [...attaccanti_sorted, ...portieri_sorted];
+                else if (mode === 'alternate') {
+                     let p_idx = 0; let a_idx = 0;
                      while(p_idx < portieri_sorted.length || a_idx < attaccanti_sorted.length) {
                          if (p_idx < portieri_sorted.length) list.push(portieri_sorted[p_idx++]);
                          if (a_idx < attaccanti_sorted.length) list.push(attaccanti_sorted[a_idx++]);
                      }
-                     return list;
+                } else {
+                    list = [...db.players].sort((a, b) => a.name.localeCompare(b.name));
                 }
-                return [...db.players].sort((a, b) => a.name.localeCompare(b.name));
+
+                // NUOVO: Filtro Ricerca
+                if (searchQuery) {
+                    list = list.filter(p => p.name.toLowerCase().includes(searchQuery));
+                }
+                
+                return list;
             };
 
             let html = `
@@ -1274,7 +1380,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <h3 class="text-xl font-semibold mb-4">Aggiungi Nuovo Giocatore</h3>
                     <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                         <div class="md:col-span-4">
-                            <input type="text" id="new-player-name" placeholder="Nome Giocatore">
+                            <input type="text" id="new-player-name" placeholder="Nome Giocatore" maxlength="50">
                         </div>
                         <div class="md:col-span-4">
                             <select id="new-player-role">
@@ -1295,14 +1401,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
 
                 <div class="card">
-                    <div class="flex justify-between items-center mb-4 border-b pb-2">
-                        <h3 class="text-xl font-semibold">Lista Giocatori (${db.players.length})</h3>
-                        <select id="player-sort-mode" class="w-auto p-2 border rounded text-sm bg-white">
-                            <option value="name" ${sortMode==='name'?'selected':''}>Ordina per Nome</option>
-                            <option value="alternate" ${sortMode==='alternate'?'selected':''}>Alterna P/A</option>
-                            <option value="P_first" ${sortMode==='P_first'?'selected':''}>Portieri, poi Attaccanti</option>
-                            <option value="A_first" ${sortMode==='A_first'?'selected':''}>Attaccanti, poi Portieri</option>
-                        </select>
+                    <div class="flex flex-col md:flex-row justify-between md:items-center mb-4 border-b pb-2 gap-4">
+                        <h3 class="text-xl font-semibold whitespace-nowrap">Lista Giocatori (${db.players.length})</h3>
+                        <div class="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+                            <!-- NUOVO: Barra di Ricerca -->
+                            <div class="relative flex-grow max-w-sm">
+                                <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"></i>
+                                <input type="search" id="player-search" value="${searchQuery}" placeholder="Cerca giocatore..." class="w-full pl-9 p-2 border rounded text-sm">
+                            </div>
+                            <select id="player-sort-mode" class="w-auto p-2 border rounded text-sm bg-white">
+                                <option value="name" ${sortMode==='name'?'selected':''}>Ordina per Nome</option>
+                                <option value="alternate" ${sortMode==='alternate'?'selected':''}>Alterna P/A</option>
+                                <option value="P_first" ${sortMode==='P_first'?'selected':''}>Portieri, poi Attaccanti</option>
+                                <option value="A_first" ${sortMode==='A_first'?'selected':''}>Attaccanti, poi Portieri</option>
+                            </select>
+                        </div>
                     </div>
                     
                     <div class="stat-grid mb-4">
@@ -1340,18 +1453,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
             });
             
-            const sortSelect = document.getElementById('player-sort-mode');
-            sortSelect.addEventListener('change', (e) => {
-                sortMode = e.target.value;
+            // Re-render dinamico per ordinamento e ricerca
+            const updatePlayerList = () => {
+                sortMode = document.getElementById('player-sort-mode').value;
+                searchQuery = document.getElementById('player-search').value.toLowerCase();
                 document.getElementById('player-list-table-container').innerHTML = views.renderPlayerTable(getPlayerListToRender(sortMode));
                 views.attachPlayerTableListeners();
-            });
+            };
+
+            document.getElementById('player-sort-mode').addEventListener('change', updatePlayerList);
+            document.getElementById('player-search').addEventListener('input', updatePlayerList);
             
             views.attachPlayerTableListeners();
         },
 
         renderPlayerTable: (players) => {
-            if (players.length === 0) return '<p class="text-slate-500">Nessun giocatore registrato.</p>';
+            if (players.length === 0) return '<p class="text-slate-500 text-center py-4">Nessun giocatore trovato.</p>';
             
             return `
                 <table class="w-full table-striped">
@@ -1372,6 +1489,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                     </span>
                                 </td>
                                 <td class="no-print text-right">
+                                    <button class="btn btn-ghost btn-sm info-player-btn text-blue-500 hover:bg-blue-50" data-id="${p.id}" title="Vedi Storia e Statistiche">
+                                        <i data-lucide="line-chart" class="w-4 h-4"></i>
+                                    </button>
                                     <button class="btn btn-ghost btn-sm edit-player-btn" data-id="${p.id}" title="Modifica Nome">
                                         <i data-lucide="pencil" class="w-4 h-4 text-slate-400"></i>
                                     </button>
@@ -1389,6 +1509,83 @@ document.addEventListener('DOMContentLoaded', () => {
         attachPlayerTableListeners: () => {
             lucide.createIcons();
             
+            // Nuova logica: Mostra la storia del giocatore
+            document.querySelectorAll('.info-player-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const id = e.currentTarget.getAttribute('data-id');
+                    const player = utils.getPlayerById(id);
+                    if (!player) return;
+
+                    // Recupera le statistiche dalla classifica generale
+                    const standings = utils.getStandings();
+                    const stats = standings.find(s => s.id === id) || { G: 0, V: 0, N: 0, P: 0, Pts: 0, GF: 0, GS: 0, Diff: 0 };
+
+                    // Recupera tutte le partite in cui il giocatore è coinvolto
+                    const matches = db.schedule.filter(m => 
+                        (m.team1 && (m.team1.p === id || m.team1.a === id)) ||
+                        (m.team2 && (m.team2.p === id || m.team2.a === id))
+                    );
+
+                    // Costruisce la cronologia HTML
+                    let historyHtml = '<p class="text-sm text-slate-500 mb-4">Nessuna partita registrata a calendario.</p>';
+                    if (matches.length > 0) {
+                        historyHtml = `<ul class="text-sm space-y-2 max-h-64 overflow-y-auto pr-2">`;
+                        matches.forEach(m => {
+                            const isTeam1 = m.team1.p === id || m.team1.a === id;
+                            const compagnoId = isTeam1 ? (m.team1.p === id ? m.team1.a : m.team1.p) : (m.team2.p === id ? m.team2.a : m.team2.p);
+                            const compagno = utils.getPlayerById(compagnoId)?.name || 'Sconosciuto';
+                            
+                            const avversari = isTeam1 
+                                ? `${utils.getPlayerById(m.team2.p)?.name} + ${utils.getPlayerById(m.team2.a)?.name}`
+                                : `${utils.getPlayerById(m.team1.p)?.name} + ${utils.getPlayerById(m.team1.a)?.name}`;
+
+                            const statusStr = m.played ? `${m.score1} - ${m.score2}` : (m.inProgress ? 'In Corso' : 'Da Giocare');
+                            
+                            let resClass = 'text-slate-500';
+                            let badgeIcon = 'clock';
+                            if (m.played) {
+                                const myScore = isTeam1 ? m.score1 : m.score2;
+                                const oppScore = isTeam1 ? m.score2 : m.score1;
+                                if (myScore > oppScore) { resClass = 'text-green-600 font-bold bg-green-50'; badgeIcon = 'check-circle'; }
+                                else if (myScore < oppScore) { resClass = 'text-red-600 font-bold bg-red-50'; badgeIcon = 'x-circle'; }
+                                else { resClass = 'text-amber-600 font-bold bg-amber-50'; badgeIcon = 'minus-circle'; }
+                            }
+
+                            historyHtml += `
+                                <li class="p-3 bg-white rounded border border-slate-200 shadow-sm flex flex-col gap-1">
+                                    <div class="flex justify-between items-center border-b border-slate-100 pb-1 mb-1">
+                                        <span class="font-mono text-xs text-slate-500">Round ${m.round}</span>
+                                        <span class="text-xs px-2 py-0.5 rounded ${resClass} flex items-center gap-1">
+                                            <i data-lucide="${badgeIcon}" class="w-3 h-3"></i> ${statusStr}
+                                        </span>
+                                    </div>
+                                    <div class="text-xs">
+                                        <span class="text-slate-500">Insieme a:</span> <span class="font-medium">${compagno}</span>
+                                    </div>
+                                    <div class="text-xs">
+                                        <span class="text-slate-500">Contro:</span> <span>${avversari}</span>
+                                    </div>
+                                </li>`;
+                        });
+                        historyHtml += `</ul>`;
+                    }
+
+                    // Assembla il corpo della modale
+                    const body = `
+                        <div class="grid grid-cols-4 gap-2 mb-6 text-center">
+                            <div class="p-2 bg-amber-50 rounded border border-amber-100"><div class="text-xs text-amber-600 font-semibold">Punti</div><div class="font-bold text-lg text-amber-800">${stats.Pts}</div></div>
+                            <div class="p-2 bg-slate-50 rounded border border-slate-200"><div class="text-[10px] text-slate-500 font-semibold uppercase">Giocate</div><div class="font-bold text-slate-700">${stats.G}</div></div>
+                            <div class="p-2 bg-green-50 rounded border border-green-200"><div class="text-[10px] text-green-600 font-semibold uppercase">Vittorie</div><div class="font-bold text-green-700">${stats.V}</div></div>
+                            <div class="p-2 bg-red-50 rounded border border-red-200"><div class="text-[10px] text-red-600 font-semibold uppercase">Sconfitte</div><div class="font-bold text-red-700">${stats.P}</div></div>
+                        </div>
+                        <h4 class="text-sm font-semibold mb-3 text-slate-700 border-b pb-1 flex items-center gap-2"><i data-lucide="calendar-days" class="w-4 h-4"></i> Cronologia Partite</h4>
+                        ${historyHtml}
+                    `;
+                    ui.showModal(`Storia: ${player.name}`, body);
+                });
+            });
+
+            // Logica esistente per la rimozione
             document.querySelectorAll('.remove-player-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     if (confirm('Sicuro di voler rimuovere questo giocatore? Tutte le partite verranno aggiornate.')) {
@@ -1397,13 +1594,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
             
+            // Logica esistente per la modifica nome
             document.querySelectorAll('.edit-player-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const id = e.currentTarget.getAttribute('data-id');
                     const player = utils.getPlayerById(id);
                     if (!player) return;
                     
-                    const body = `<input type="text" id="edit-player-name-input" value="${player.name}" class="w-full border p-2 rounded" placeholder="Nuovo Nome" autofocus>`;
+                    const body = `<input type="text" id="edit-player-name-input" value="${player.name}" maxlength="50" class="w-full border p-2 rounded" placeholder="Nuovo Nome" autofocus>`;
                     const footer = `
                         <button class="btn btn-secondary" onclick="document.getElementById('modal-close-btn').click()">Annulla</button>
                         <button class="btn btn-primary" id="save-player-name">Salva</button>
@@ -1665,7 +1863,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
 
-            // Auto-save logic
             document.querySelectorAll('.autosave-input').forEach(input => {
                 const saveScore = (e) => {
                     const id = e.target.getAttribute('data-id');
@@ -1693,8 +1890,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let sortMode = document.getElementById('standings-sort-mode')?.value || 'rank';
 
-            // Il numero di classifica (#) riflette sempre la posizione reale per punti,
-            // indipendentemente dall'ordine di visualizzazione scelto qui sotto.
             let displayList = standings.map((s, idx) => ({ ...s, rank: idx + 1 }));
 
             if (sortMode === 'P_first') {
@@ -1711,17 +1906,23 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             let html = `
-                <div class="card">
+                <div class="card relative">
                     <div class="flex flex-col md:flex-row justify-between md:items-center gap-3 mb-4 border-b pb-2">
                         <h3 class="text-xl font-semibold">Classifica Generale</h3>
-                        <div class="no-print">
-                            <label class="text-sm font-medium text-slate-600 mr-2">Ordina per:</label>
-                            <select id="standings-sort-mode">
-                                <option value="rank" ${sortMode === 'rank' ? 'selected' : ''}>Classifica (default)</option>
-                                <option value="P_first" ${sortMode === 'P_first' ? 'selected' : ''}>Portieri, poi Attaccanti</option>
-                                <option value="A_first" ${sortMode === 'A_first' ? 'selected' : ''}>Attaccanti, poi Portieri</option>
-                                <option value="alternate" ${sortMode === 'alternate' ? 'selected' : ''}>Alterna Portiere/Attaccante</option>
-                            </select>
+                        <div class="no-print flex gap-3 items-center">
+                            <!-- NUOVO: Pulsante Modalità TV -->
+                            <button id="tv-mode-btn" class="btn btn-secondary btn-sm" title="Mostra a schermo intero">
+                                <i data-lucide="tv" class="w-4 h-4"></i> TV
+                            </button>
+                            <div>
+                                <label class="text-sm font-medium text-slate-600 mr-2">Ordina per:</label>
+                                <select id="standings-sort-mode">
+                                    <option value="rank" ${sortMode === 'rank' ? 'selected' : ''}>Classifica (default)</option>
+                                    <option value="P_first" ${sortMode === 'P_first' ? 'selected' : ''}>Portieri, poi Attaccanti</option>
+                                    <option value="A_first" ${sortMode === 'A_first' ? 'selected' : ''}>Attaccanti, poi Portieri</option>
+                                    <option value="alternate" ${sortMode === 'alternate' ? 'selected' : ''}>Alterna Portiere/Attaccante</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                     ${standings.length > 0 ? `
@@ -1773,6 +1974,61 @@ document.addEventListener('DOMContentLoaded', () => {
             lucide.createIcons();
 
             document.getElementById('standings-sort-mode')?.addEventListener('change', views.renderStandings);
+
+            // GESTIONE MODALITA' TV
+            document.getElementById('tv-mode-btn')?.addEventListener('click', () => {
+                document.body.classList.add('tv-mode-active');
+                
+                // Iniettiamo gli stili per la TV se non ci sono
+                if (!document.getElementById('tv-mode-styles')) {
+                    const style = document.createElement('style');
+                    style.id = 'tv-mode-styles';
+                    style.innerHTML = `
+                        body.tv-mode-active { overflow: hidden; background: white; }
+                        body.tv-mode-active #content-view { 
+                            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
+                            background: white; z-index: 9999; padding: 3rem; overflow-y: auto; 
+                        }
+                        body.tv-mode-active .no-print, body.tv-mode-active .sidebar, body.tv-mode-active header { display: none !important; }
+                        body.tv-mode-active table { font-size: 1.8rem; line-height: 2.2rem; margin-top: 1rem; }
+                        body.tv-mode-active th, body.tv-mode-active td { padding: 1.2rem; }
+                        body.tv-mode-active h3 { font-size: 2.5rem; text-align: center; margin-bottom: 2rem; }
+                        .tv-exit-hint { display: none; }
+                        body.tv-mode-active .tv-exit-hint { 
+                            display: block; position: fixed; bottom: 2rem; right: 2rem; 
+                            background: rgba(0,0,0,0.8); color: white; padding: 0.75rem 1.5rem; 
+                            border-radius: 99px; z-index: 10000; font-size: 1.2rem; cursor: pointer; 
+                            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
+                
+                // Bottone/Hint per uscire dalla modalità
+                let exitHint = document.querySelector('.tv-exit-hint');
+                if(!exitHint) {
+                    exitHint = document.createElement('div');
+                    exitHint.className = 'tv-exit-hint';
+                    exitHint.innerHTML = '<i data-lucide="x" class="w-5 h-5 inline-block mr-2 align-middle"></i> Esci (ESC)';
+                    exitHint.onclick = () => exitTvMode();
+                    document.body.appendChild(exitHint);
+                    lucide.createIcons();
+                } else {
+                    exitHint.style.display = 'block';
+                }
+
+                // Event listener per ESC
+                const escHandler = (e) => {
+                    if (e.key === 'Escape') exitTvMode(escHandler);
+                };
+                
+                const exitTvMode = (handlerRef = null) => {
+                    document.body.classList.remove('tv-mode-active');
+                    if(handlerRef) document.removeEventListener('keydown', handlerRef);
+                };
+
+                document.addEventListener('keydown', escHandler);
+            });
         },
 
         renderPlayoffs: () => {
@@ -1872,7 +2128,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
             }
 
-            // Classifica finale combinata (via via che i risultati si determinano)
             if (db.playoffs.mainBracket) {
                 const champion = logic.playoffs.getBracketChampion(db.playoffs.mainBracket);
                 const runnerUp = logic.playoffs.getFinalLoser(db.playoffs.mainBracket);
@@ -1904,7 +2159,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (db.playoffs.mainBracket && hasBracketContent(db.playoffs.mainBracket)) {
                 html += `
                     <details class="card overflow-x-auto" open>
-                        <summary class="text-xl font-semibold mb-4 border-b pb-2 cursor-pointer">Playoff — Tabellone Principale (1°-4° posto)</summary>
+                        <summary class="text-xl font-semibold mb-4 border-b pb-2 cursor-pointer">Playoff — Tabellone Principale (1°-2° posto)</summary>
+                        <p class="text-sm text-slate-500 mb-2">Tabellone a eliminazione diretta per l'assegnazione del 1° e 2° posto (la finalina 3°/4° posto è consultabile nella sezione successiva).</p>
                         <div class="flex space-x-8 p-4">
                             ${views.renderBracketRound(db.playoffs.mainBracket)}
                         </div>
@@ -1948,7 +2204,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += `
                     <details class="card overflow-x-auto" open>
                         <summary class="text-xl font-semibold mb-4 border-b pb-2 cursor-pointer">Playout (${db.playoffs.fifthPlaceBracket ? '6° posto' : '5° posto'})</summary>
-                        <p class="text-sm text-slate-500 mb-2">Riservato alle squadre formate dai giocatori oltre il 4° posto della classifica del proprio ruolo.</p>
+                        <p class="text-sm text-slate-500 mb-2">Riservato alle squadre formate dai giocatori oltre il ${db.settings.playoffRoleSize || 8}° posto della classifica del proprio ruolo.</p>
                         ${db.playoffs.excludedPlayoutTeam ? `<p class="text-sm text-amber-700 mb-2">Squadra esclusa per numero dispari: <b>${logic.playoffs.participantName(db.playoffs.excludedPlayoutTeam)}</b>.</p>` : ''}
                         <div class="flex space-x-8 p-4">
                             ${views.renderBracketRound(db.playoffs.playoutBracket)}
@@ -2183,8 +2439,80 @@ document.addEventListener('DOMContentLoaded', () => {
                     location.reload(); 
                 }
             });
-        }
+        },
+
+           renderTvMode: () => {
+            const tvContent = document.getElementById('tv-content');
+            if (!tvContent) return;
+
+            const liveMatches = db.schedule.filter(m => m.inProgress && !m.played);
+            const standings = utils.getStandings().slice(0, 10); // Mostra solo la Top 10
+
+            let html = `
+                <!-- Colonna Sinistra: Partite Live -->
+                <div>
+                    <h2 class="tv-section-title"><i data-lucide="zap" class="w-6 h-6 text-amber-500"></i> Partite in Corso</h2>
+                    ${liveMatches.length === 0 ? '<p class="text-slate-400">Nessuna partita in corso al momento.</p>' : ''}
+                    ${liveMatches.map(m => `
+                        <div class="tv-match-card is-live">
+                            <div class="flex justify-between items-center mb-3 border-b border-slate-700/50 pb-2">
+                                <span class="tv-pill tv-pill-gold">Round ${m.round}</span>
+                                <span class="tv-pill tv-pill-green animate-pulse">In Corso</span>
+                            </div>
+                            <div class="tv-team-row text-blue-100">
+                                <div><span class="tv-role-badge tv-role-p mr-1">P</span>${utils.getPlayerById(m.team1.p).name} &bull; <span class="tv-role-badge tv-role-a mr-1 text-xs">A</span>${utils.getPlayerById(m.team1.a).name}</div>
+                                <div class="tv-score-box">${m.score1 !== null ? m.score1 : '0'}</div>
+                            </div>
+                            <div class="tv-team-row text-red-100 mt-2">
+                                <div><span class="tv-role-badge tv-role-p mr-1">P</span>${utils.getPlayerById(m.team2.p).name} &bull; <span class="tv-role-badge tv-role-a mr-1 text-xs">A</span>${utils.getPlayerById(m.team2.a).name}</div>
+                                <div class="tv-score-box">${m.score2 !== null ? m.score2 : '0'}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <!-- Colonna Destra: Classifica -->
+                <div class="tv-card">
+                    <h2 class="tv-section-title"><i data-lucide="trophy" class="w-6 h-6 text-amber-500"></i> Top 10 Classifica</h2>
+                    <table class="tv-standings-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Giocatore</th>
+                                <th>Punti</th>
+                                <th>Giocate</th>
+                                <th>Diff</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${standings.map((s, index) => `
+                                <tr class="${index < 3 ? 'tv-top-rank' : ''}">
+                                    <td>${index + 1}</td>
+                                    <td>${s.name} <span class="text-[0.65rem] ml-2 px-1.5 py-0.5 rounded ${s.role === 'Portiere' ? 'bg-sky-500/20 text-sky-300' : 'bg-orange-500/20 text-orange-300'}">${s.role[0]}</span></td>
+                                    <td class="font-bold text-amber-400 text-lg">${s.Pts}</td>
+                                    <td>${s.G}</td>
+                                    <td>${s.Diff > 0 ? '+'+s.Diff : s.Diff}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            tvContent.innerHTML = html;
+            lucide.createIcons();
+
+            // Aggiorna automaticamente la TV ogni 10 secondi
+            if (!views.tvInterval) {
+                views.tvInterval = setInterval(() => {
+                    if (!document.getElementById('tv-modal').classList.contains('hidden')) {
+                        views.renderTvMode();
+                    }
+                }, 10000);
+            }
+        },
     };
+
 
     // ==========================================
     // 7. INIZIALIZZAZIONE E BOOT
@@ -2205,7 +2533,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const flushStateToStorage = () => {
         try {
-            localStorage.setItem('torneoGialloDB', JSON.stringify(db));
+            const stateToSave = {
+                players: db.players,
+                schedule: db.schedule,
+                settings: db.settings,
+                playoffs: db.playoffs
+            };
+            localStorage.setItem('torneoGialloDB', JSON.stringify(stateToSave));
             setSaveStatus('Dati salvati sul dispositivo.', 'success');
         } catch (error) {
             console.error('Errore salvataggio localStorage:', error);
@@ -2219,10 +2553,36 @@ document.addEventListener('DOMContentLoaded', () => {
         flushStateToStorage();
     };
 
+    // === FIX SCHERMATA BIANCA E NAVIGAZIONE ===
     document.querySelectorAll('.nav-link').forEach(link => {
         link.addEventListener('click', (e) => {
-            ui.navigateTo(e.currentTarget.getAttribute('data-view'));
+            const view = e.currentTarget.getAttribute('data-view');
+            if (view) { 
+                ui.navigateTo(view); 
+            }
         });
+    });
+
+    // === GESTIONE MODALITÀ TV (Nuovo HTML) ===
+    document.getElementById('tv-mode-btn')?.addEventListener('click', () => {
+        const tvModal = document.getElementById('tv-modal');
+        if (tvModal) {
+            tvModal.classList.remove('hidden');
+            views.renderTvMode(); // Genera i contenuti live
+        }
+    });
+
+    document.getElementById('tv-close-btn')?.addEventListener('click', () => {
+        document.getElementById('tv-modal')?.classList.add('hidden');
+    });
+
+    // Funzione per il Fullscreen del browser in modalità TV
+    document.getElementById('tv-fullscreen-btn')?.addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => console.error(err));
+        } else {
+            document.exitFullscreen();
+        }
     });
 
     if (printSectionBtn) {
@@ -2239,12 +2599,16 @@ document.addEventListener('DOMContentLoaded', () => {
             db = {
                 ...db, 
                 ...loadedDb, 
+                history: [],
+                historyIndex: -1,
                 settings: { ...db.settings, ...(loadedDb.settings || {}) },
                 playoffs: { ...db.playoffs, ...(loadedDb.playoffs || {}) }
             };
+            saveHistory();
             ui.showAlert('Dati precedenti caricati.', 'info');
         } catch (e) {
             console.error("Errore nel caricamento da localStorage", e);
+            saveHistory();
         }
     } else {
         saveHistory();

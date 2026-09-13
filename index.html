@@ -58,6 +58,10 @@
                     <i data-lucide="settings" class="w-5 h-5"></i>
                     <span class="nav-label">Impostazioni</span>
                 </div>
+                <div class="nav-link tv-nav-btn mt-4 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 cursor-pointer" id="tv-mode-btn" role="button" title="Apri visualizzazione tabellone per TV o proiettore">
+                    <i data-lucide="tv" class="w-5 h-5 text-amber-400"></i>
+                    <span class="nav-label font-semibold">Schermo TV</span>
+                </div>
             </nav>
 
             <div class="sidebar-footer">
@@ -103,6 +107,30 @@
 
     <!-- Input Nascosto per Importazione JSON -->
     <input type="file" id="import-json-file" class="hidden" accept=".json">
+
+    <!-- Modalità Schermo TV / Proiettore Fullscreen -->
+    <div id="tv-modal" class="tv-modal hidden">
+        <div class="tv-header">
+            <div class="tv-brand">
+                <span class="tv-dot"></span>
+                <h1 class="tv-title">Biliardino Tornei — Live TV</h1>
+                <span class="tv-live-badge"><span class="tv-live-dot"></span> LIVE</span>
+            </div>
+            <div class="tv-actions">
+                <button id="tv-fullscreen-btn" class="tv-action-btn" title="Schermo Intero (F11)">
+                    <i data-lucide="maximize" class="w-5 h-5"></i>
+                    <span>Schermo Intero</span>
+                </button>
+                <button id="tv-close-btn" class="tv-action-btn tv-action-close" title="Esci dalla modalità TV (ESC)">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                    <span>Esci (ESC)</span>
+                </button>
+            </div>
+        </div>
+        <div id="tv-content" class="tv-content">
+            <!-- Popolato dinamicamente da app.js -->
+        </div>
+    </div>
 
     <!-- Il tuo file JavaScript -->
     <script src="app.js"></script>

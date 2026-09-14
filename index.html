@@ -26,12 +26,10 @@
         <!-- Sidebar / Menu di Navigazione (Compatta su Notebook, Larga su PC fisso) -->
         <div class="sidebar flex flex-col md:w-20 xl:w-64 transition-all duration-300 flex-shrink-0 z-50">
             
-            <!-- TITOLO -->
-            <div class="sidebar-brand flex justify-center xl:justify-start items-center mb-2 md:mb-6">
+            <!-- TITOLO (Nascosto su smartphone, visibile da notebook in su) -->
+            <div class="sidebar-brand hidden md:flex justify-center xl:justify-start items-center mb-2 md:mb-6">
                 <span class="dot hidden xl:inline-block"></span>
-                <!-- Testo visibile su cellulare e su mega schermi -->
-                <h1 class="text-xl font-black text-slate-800 md:hidden xl:block tracking-tight uppercase">Torneo Giallo</h1>
-                <!-- Icona Coppa visibile SOLO su notebook (schermi medi) -->
+                <h1 class="text-xl font-black text-slate-800 hidden xl:block tracking-tight uppercase">Torneo Giallo</h1>
                 <i data-lucide="trophy" class="w-7 h-7 text-amber-500 hidden md:block xl:hidden mx-auto mt-2"></i>
             </div>
 

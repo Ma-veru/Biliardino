@@ -27,6 +27,15 @@
 
 * { box-sizing: border-box; }
 
+/* Nascondere la grossa barra di scorrimento ma mantenere la funzione touch */
+.hide-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
 body {
     font-family: 'Inter', sans-serif;
     background-color: var(--paper);
@@ -427,27 +436,28 @@ input:focus, select:focus {
         flex-direction: row;
         border-top: 1px solid rgba(255,255,255,0.08);
         padding-bottom: env(safe-area-inset-bottom, 0);
-        overflow-x: auto;
-        overflow-y: hidden;
+        /* 1. Blocchiamo il conflitto di scorrimento qui */
+        overflow: hidden; 
     }
     .sidebar-brand, .sidebar-footer { display: none; }
     #nav-list {
         flex-direction: row;
         width: 100%;
         gap: 0;
+        /* 2. Diciamo al telefono di scorrere qua dentro in modo fluido */
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
     }
     .nav-link {
-        flex: 1 0 auto;
+        /* 3. flex: 0 0 auto IMPEDISCE alle icone di schiacciarsi e sparire */
+        flex: 0 0 auto; 
         flex-direction: column;
         justify-content: center;
         gap: 0.15rem;
         border-radius: 0;
         padding: 0.4rem 0.5rem;
-        min-width: 64px;
-    }
-    .nav-link.active {
-        background-color: transparent;
-        color: var(--gold);
+        min-width: 76px; 
     }
     .nav-link.active:hover { background-color: var(--ink-soft); }
     .nav-label {

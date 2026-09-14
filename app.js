@@ -1736,7 +1736,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const targetGames = db.settings.rounds;
             const playerGameCounts = utils.getPlayerGameCounts();
 
-            let sortMode = document.getElementById('standings-sort-mode')?.value || 'rank';
+            // Creiamo una memoria che parte sempre da "Portieri prima"
+            if (!window.savedSortMode) window.savedSortMode = 'P_first';
+            // Se la tendina esiste, salviamo la scelta attuale dell'utente
+            if (document.getElementById('standings-sort-mode')) {
+                window.savedSortMode = document.getElementById('standings-sort-mode').value;
+            }
+            let sortMode = window.savedSortMode;
 
             let displayList = standings.map((s, idx) => ({ ...s, rank: idx + 1 }));
 
@@ -1766,7 +1772,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 </button>
                                 <div class="flex items-center w-full sm:w-auto bg-slate-50 p-1 rounded border border-slate-200">
                                     <i data-lucide="filter" class="w-4 h-4 text-slate-400 mx-2"></i>
-                                    <select id="standings-sort-mode" class="border-none bg-transparent focus:ring-0 text-sm py-1 font-medium text-slate-700 w-full">
+                                    <select id="standings-sort-mode" autocomplete="off" class="border-none bg-transparent focus:ring-0 text-sm py-1 font-medium text-slate-700 w-full">
                                         <option value="rank" ${sortMode === 'rank' ? 'selected' : ''}>Posizione (#)</option>
                                         <option value="P_first" ${sortMode === 'P_first' ? 'selected' : ''}>Portieri prima</option>
                                         <option value="A_first" ${sortMode === 'A_first' ? 'selected' : ''}>Attaccanti prima</option>

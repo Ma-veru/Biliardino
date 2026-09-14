@@ -1,6 +1,29 @@
+/*!
+ * @application Biliardino Tornei - Torneo Giallo
+ * @version 1.0.1
+ * @author Ippazio (Creatore del Software)
+ * @copyright © 2026 TuoNickname. Tutti i diritti riservati.
+ * 
+ * Biliardino Tornei v1.0.1 è un software di proprietà intellettuale esclusiva. 
+ * È severamente vietata la copia, la distribuzione, la riproduzione, 
+ * la modifica o il reverse engineering senza esplicita autorizzazione dell'autore.
+ * 
+ * DISCLAIMER: Questo software è fornito "così com'è". 
+ * L'autore declina ogni responsabilità derivante dall'utilizzo 
+ * diretto o indiretto di questo software o dall'eventuale perdita di dati.
+ */
+
+// Firma visibile nella console del browser (F12)
+console.log(
+    "%c Biliardino Tornei v1.0.1 %c Sviluppato da TuoNickname ", 
+    "color: #1c1917; background: #d4a017; font-weight: bold; padding: 4px 0; border-radius: 4px 0 0 4px;", 
+    "color: #fff; background: #1c1917; font-weight: bold; padding: 4px 0; border-radius: 0 4px 4px 0;"
+);
+
 // ==========================================
 // FUNZIONE DISCLAIMER (Da mettere in cima)
 // ==========================================
+
 function checkFirstVisitDisclaimer() {
     if (!localStorage.getItem('biliardino_disclaimer_accepted')) {
         const modalContainer = document.getElementById('modal-container');

@@ -1,12 +1,52 @@
+// ==========================================
+// FUNZIONE DISCLAIMER (Da mettere in cima)
+// ==========================================
+function checkFirstVisitDisclaimer() {
+    if (!localStorage.getItem('biliardino_disclaimer_accepted')) {
+        const modalContainer = document.getElementById('modal-container');
+        const modalContent = document.getElementById('modal-content');
+        
+        modalContent.innerHTML = `
+            <div class="modal-header">
+                <h3 class="modal-title text-amber-600 flex items-center gap-2">
+                    <i data-lucide="alert-triangle" class="w-6 h-6"></i> Avviso Importante
+                </h3>
+            </div>
+            <div class="modal-body text-slate-700 space-y-4">
+                <p>Benvenuto in <strong>Biliardino Tornei</strong>!</p>
+                <p>Questo software è fornito "così com'è", gratuitamente. I dati dei tornei e dei giocatori vengono salvati <strong>esclusivamente nella memoria di questo browser</strong>.</p>
+                <div class="bg-red-50 text-red-800 p-3 rounded border border-red-200 text-sm">
+                    <strong>Attenzione:</strong> L'autore del software non si assume alcuna responsabilità per l'eventuale perdita di dati, malfunzionamenti o cancellazioni accidentali.
+                </div>
+                <p class="text-sm">Ti raccomandiamo vivamente di utilizzare i tasti <strong>Esporta JSON</strong> per creare copie di sicurezza frequenti dei tuoi tornei.</p>
+            </div>
+            <div class="modal-footer">
+                <button id="accept-disclaimer-btn" class="btn btn-primary w-full">Ho capito e accetto</button>
+            </div>
+        `;
+        
+        modalContainer.classList.add('active');
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        
+        document.getElementById('accept-disclaimer-btn').addEventListener('click', () => {
+            localStorage.setItem('biliardino_disclaimer_accepted', 'true');
+            modalContainer.classList.remove('active');
+        });
+    }
+}
+
+// ==========================================
+// AVVIO DELL'APP
+// ==========================================
 window.onload = () => {
     lucide.createIcons();
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-
-    // ==========================================
-    // 1. STATO DEL DATABASE (DB)
-    // ==========================================
+    
+    // FA PARTIRE IL CONTROLLO APPENA SI CARICA LA PAGINA!
+    checkFirstVisitDisclaimer();
+    
     // ==========================================
     // 1. STATO DEL DATABASE (DB)
     // ==========================================
@@ -1294,6 +1334,21 @@ document.addEventListener('DOMContentLoaded', () => {
                             <button id="export-pdf-btn" class="btn btn-secondary bg-white">
                                 <i data-lucide="file-text" class="w-4 h-4 text-red-600"></i> Esporta PDF Classifica
                             </button>
+                            <!-- Avviso Salvataggio Dati -->
+                            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 flex gap-3">
+                                <i data-lucide="info" class="w-6 h-6 text-blue-500 flex-shrink-0 mt-0.5"></i>
+                                <div class="text-sm text-blue-800">
+                                    <h4 class="font-bold mb-1">Come vengono salvati i dati?</h4>
+                                    <p class="mb-2">
+                                        Questa applicazione funziona interamente sul tuo dispositivo. I tornei e i punteggi vengono salvati in automatico nella memoria di <strong>questo browser</strong>.
+                                    </p>
+                                    <ul class="list-disc pl-4 space-y-1 text-blue-700">
+                                        <li>Non usare la <strong>navigazione in incognito</strong>, altrimenti perderai tutto chiudendo la pagina.</li>
+                                        <li>Se elimini la cronologia o svuoti la cache del browser, i dati del torneo verranno cancellati.</li>
+                                        <li>Usa i tasti <strong>Esporta / Importa JSON</strong> per fare un backup o per spostare il torneo su un altro dispositivo (es. dal telefono al PC).</li>
+                                    </ul>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     

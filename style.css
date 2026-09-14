@@ -688,11 +688,15 @@ input:focus, select:focus {
     margin: 0 auto;
     width: 100%;
 }
-@media (max-width: 1024px) {
+@media (max-width: 1023px) {
     .tv-content {
         grid-template-columns: 1fr;
     }
 }
+.nav-link.active {
+        background-color: transparent !important;
+        color: var(--gold) !important;
+    }
 .tv-section-title {
     font-size: 1.3rem;
     font-weight: 700;
